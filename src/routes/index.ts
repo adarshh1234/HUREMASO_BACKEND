@@ -1,0 +1,86 @@
+import { Router } from 'express';
+import notificationRoutes from '../modules/notification/notification.routes';
+import healthRoutes from '../common/routes/health.routes';
+import adminRoutes from '../modules/admin/admin.routes';
+import employeeRoutes from '../modules/employee/employee.routes';
+import leaveRoutes from '../modules/employee/leave/leave.routes';
+import employeeRequestRoutes from '../modules/employee/requests/request.routes';
+import employeeDocumentRoutes from '../modules/employee/documents/document.routes';
+import hrLetterRoutes from '../modules/employee/hrLetters/hrLetter.routes';
+import projectRoutes from '../modules/employee/projects/project.routes';
+import legalRoutes from '../modules/employee/legal/legal.routes';
+import employeeConfigRoutes from '../modules/employee/config/employeeConfig.routes';
+import massMessageRoutes from '../modules/employee/massMessage/massMessage.routes';
+import performanceRoutes from '../modules/employee/performance/performance.routes';
+import { performanceMasterRoutes } from '../modules/performance/performance.routes';
+import performanceAppraisalRoutes from '../modules/performance/performanceAppraisal.routes';
+import employeeReportRoutes from '../modules/employee/reports/employeeReport.routes';
+
+import recruitmentRoutes from '../modules/recruitment/recruitment.routes';
+import timeRoutes from '../modules/time/time.routes';
+import calendarRoutes from '../modules/calendar/calendar.routes';
+import notesRoutes from '../modules/notes/notes.routes';
+import tasksRoutes from '../modules/tasks/tasks.routes';
+import { payrollRoutes } from '../modules/payroll/payroll.routes';
+import { onboardingRoutes } from '../modules/onboarding/onboarding.routes';
+import { offboardingRoutes } from '../modules/offboarding/offboarding.routes';
+import { eventRoutes } from '../modules/events/event.routes';
+import employeeAppRoutes from '../modules/employeeApp/employeeApp.routes';
+import wellnessRoutes from '../modules/wellness/wellness.routes';
+import analyticsRoutes, { reportsRouter } from '../modules/analytics/analytics.routes';
+import supportRoutes from '../modules/support/support.routes';
+import maintenanceRoutes from '../modules/maintenance/maintenance.routes';
+import associationRoutes from '../modules/association/association.routes';
+import aiRoutes from '../modules/ai/ai.routes';
+import dashboardRoutes from '../modules/dashboard/dashboard.routes';
+import profileRoutes from '../modules/profile/profile.routes';
+
+const router = Router();
+
+router.use('/', healthRoutes);
+router.use('/api/v1/dashboard', dashboardRoutes);
+router.use('/api/v1/dashboards', dashboardRoutes);
+router.use('/api/v1/notifications', notificationRoutes);
+router.use('/api/v1/admin', adminRoutes);
+router.use('/api/v1/employees/config', employeeConfigRoutes);
+router.use('/api/v1/employees/reports', employeeReportRoutes);
+router.use('/api/v1/employees', employeeRoutes);
+router.use('/api/v1/leave', leaveRoutes);
+router.use('/api/v1/employee-requests', employeeRequestRoutes);
+router.use('/api/v1/employee-documents', employeeDocumentRoutes);
+router.use('/api/v1/hr-letters', hrLetterRoutes);
+router.use('/api/v1/projects', projectRoutes);
+router.use('/api/v1/legal', legalRoutes);
+router.use('/api/v1/employee-config', employeeConfigRoutes);
+router.use('/api/v1/mass-messages', massMessageRoutes);
+router.use('/api/v1/performance-appraisal', performanceAppraisalRoutes);
+router.use('/api/v1/performance', performanceMasterRoutes);
+router.use('/api/v1/employee-reports', employeeReportRoutes);
+router.use('/api/v1/recruitment', recruitmentRoutes);
+router.use('/api/v1/onboarding', onboardingRoutes);
+router.use('/api/v1/offboarding', offboardingRoutes);
+router.use('/api/v1/events', eventRoutes);
+router.use('/api/v1/time', timeRoutes);
+router.use('/api/v1/calendar', calendarRoutes);
+router.use('/api/v1/notes', notesRoutes);
+router.use('/api/v1/tasks', tasksRoutes);
+router.use('/api/v1/payroll', payrollRoutes);
+router.use('/api/v1/employee-app', employeeAppRoutes);
+router.use('/api/v1/wellness', wellnessRoutes);
+router.use('/api/v1/analytics', analyticsRoutes);
+router.use('/api/v1/reports', reportsRouter);
+router.use('/api/v1/reporting', analyticsRoutes);
+router.use('/api/v1/support', supportRoutes);
+router.use('/api/v1/miscellaneous-requests', supportRoutes);
+router.use('/api/v1/support-requests', supportRoutes);
+router.use('/api/v1/maintenance', maintenanceRoutes);
+router.use('/api/v1/association', associationRoutes);
+router.use('/api/v1/associations', associationRoutes);
+router.use('/api/v1/ai', aiRoutes);
+router.use('/api/v1/huremaso-ai', aiRoutes);
+router.use('/api/v1/profile', profileRoutes);
+
+export default router;
+
+
+
