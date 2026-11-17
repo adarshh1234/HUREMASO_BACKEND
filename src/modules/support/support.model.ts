@@ -5,9 +5,10 @@ import {
   ISupportHelpArticleDocument,
   ISupportContactRequestDocument,
   IMiscellaneousRequestDocument,
+  ISupportAgentDocument,
 } from './support.types';
 
-// ================= 1. TICKET COMMENT SCHEMA =================
+// ================= 1. TICKET SUB-SCHEMAS =================
 const TicketCommentSchema = new Schema(
   {
     id: { type: String, required: true },
@@ -17,6 +18,28 @@ const TicketCommentSchema = new Schema(
     text: { type: String, required: true, trim: true },
     timestamp: { type: String, default: () => new Date().toLocaleString() },
     isStaff: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const InternalNoteSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    author: { type: String, required: true, trim: true },
+    authorEmail: { type: String, trim: true },
+    text: { type: String, required: true, trim: true },
+    timestamp: { type: String, default: () => new Date().toISOString() },
+  },
+  { _id: false }
+);
+
+const TicketHistorySchema = new Schema(
+  {
+    id: { type: String, required: true },
+    action: { type: String, required: true },
+    performedBy: { type: String, required: true },
+    timestamp: { type: String, default: () => new Date().toISOString() },
+    details: { type: String, default: '' },
   },
   { _id: false }
 );
@@ -71,7 +94,7 @@ const SupportTicketSchema = new Schema<ISupportTicketDocument>(
     },
     status: {
       type: String,
-      enum: ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'],
+      enum: ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed', 'Reopened'],
       default: 'Open',
       index: true,
     },
@@ -86,6 +109,10 @@ const SupportTicketSchema = new Schema<ISupportTicketDocument>(
       trim: true,
       index: true,
     },
+    assignedAgentEmail: {
+      type: String,
+      trim: true,
+    },
     resolutionDetails: {
       type: String,
       default: '',
@@ -97,8 +124,29 @@ const SupportTicketSchema = new Schema<ISupportTicketDocument>(
     closedAt: {
       type: String,
     },
+    reopenedAt: {
+      type: String,
+    },
+    firstResponseAt: {
+      type: String,
+    },
+    slaDueAt: {
+      type: String,
+    },
+    linkedMaintenanceId: {
+      type: String,
+      trim: true,
+    },
     comments: {
       type: [TicketCommentSchema],
+      default: [],
+    },
+    internalNotes: {
+      type: [InternalNoteSchema],
+      default: [],
+    },
+    history: {
+      type: [TicketHistorySchema],
       default: [],
     },
     tags: {
@@ -236,6 +284,10 @@ const SupportHelpArticleSchema = new Schema<ISupportHelpArticleDocument>(
       type: Number,
       default: 0,
     },
+    unhelpfulVotes: {
+      type: Number,
+      default: 0,
+    },
     isPublished: {
       type: Boolean,
       default: true,
@@ -258,6 +310,66 @@ const SupportHelpArticleSchema = new Schema<ISupportHelpArticleDocument>(
 );
 
 export const SupportHelpArticleModel = model<ISupportHelpArticleDocument>('SupportHelpArticle', SupportHelpArticleSchema);
+
+// ================= 4b. SUPPORT AGENT SCHEMA =================
+const SupportAgentSchema = new Schema<ISupportAgentDocument>(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
+    role: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    department: {
+      type: String,
+      default: 'IT Operations',
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      lowercase: true,
+      index: true,
+    },
+    phone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    status: {
+      type: String,
+      enum: ['Online', 'Offline', 'Busy', 'On Leave'],
+      default: 'Online',
+      index: true,
+    },
+    specialties: {
+      type: String,
+      default: '',
+    },
+    avatar: {
+      type: String,
+      default: '',
+    },
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id?.toString();
+        return ret;
+      },
+    },
+  }
+);
+
+export const SupportAgentModel = model<ISupportAgentDocument>('SupportAgent', SupportAgentSchema);
 
 // ================= 5. CONTACT INQUIRY SCHEMA =================
 const SupportContactRequestSchema = new Schema<ISupportContactRequestDocument>(
@@ -337,12 +449,51 @@ export const SupportContactRequestModel = model<ISupportContactRequestDocument>(
 );
 
 // ================= 6. MISCELLANEOUS REQUEST SCHEMA =================
+const MiscellaneousRequestAuditSchema = new Schema(
+  {
+    action: {
+      type: String,
+      required: true,
+      enum: ['SUBMITTED', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'PROCESSED', 'UPDATED', 'COMMENTED'],
+    },
+    previousStatus: {
+      type: String,
+    },
+    newStatus: {
+      type: String,
+      required: true,
+    },
+    changedBy: {
+      type: String,
+      required: true,
+    },
+    changedByRole: {
+      type: String,
+      default: 'Staff',
+    },
+    timestamp: {
+      type: String,
+      default: () => new Date().toISOString(),
+    },
+    remarks: {
+      type: String,
+      default: '',
+    },
+  },
+  { _id: false }
+);
+
 const MiscellaneousRequestSchema = new Schema<IMiscellaneousRequestDocument>(
   {
     requestId: {
       type: String,
       required: true,
       unique: true,
+      trim: true,
+      index: true,
+    },
+    employeeId: {
+      type: String,
       trim: true,
       index: true,
     },
@@ -367,6 +518,10 @@ const MiscellaneousRequestSchema = new Schema<IMiscellaneousRequestDocument>(
       type: String,
       trim: true,
     },
+    title: {
+      type: String,
+      trim: true,
+    },
     requestType: {
       type: String,
       required: true,
@@ -388,6 +543,14 @@ const MiscellaneousRequestSchema = new Schema<IMiscellaneousRequestDocument>(
       default: () => new Date().toISOString().split('T')[0],
       index: true,
     },
+    requiredDate: {
+      type: String,
+      trim: true,
+    },
+    attachments: {
+      type: [String],
+      default: [],
+    },
     priority: {
       type: String,
       enum: ['High', 'Medium', 'Low'],
@@ -396,7 +559,7 @@ const MiscellaneousRequestSchema = new Schema<IMiscellaneousRequestDocument>(
     },
     status: {
       type: String,
-      enum: ['Pending', 'Approved', 'Rejected'],
+      enum: ['Pending', 'In Review', 'Approved', 'Rejected', 'Processed'],
       default: 'Pending',
       index: true,
     },
@@ -414,6 +577,36 @@ const MiscellaneousRequestSchema = new Schema<IMiscellaneousRequestDocument>(
       type: String,
       default: '',
       trim: true,
+    },
+    reviewerId: {
+      type: String,
+      trim: true,
+    },
+    reviewerName: {
+      type: String,
+      trim: true,
+    },
+    approvalRemarks: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    rejectionReason: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    processedAt: {
+      type: String,
+      trim: true,
+    },
+    processedBy: {
+      type: String,
+      trim: true,
+    },
+    auditHistory: {
+      type: [MiscellaneousRequestAuditSchema],
+      default: [],
     },
   },
   {
@@ -441,6 +634,19 @@ MiscellaneousRequestSchema.pre('save', function (next) {
   if (!this.type && this.requestType) this.type = this.requestType;
   if (!this.requestType && this.type) this.requestType = this.type;
   if (!this.date) this.date = new Date().toISOString().split('T')[0];
+  if (this.isNew && (!this.auditHistory || this.auditHistory.length === 0)) {
+    this.auditHistory = [
+      {
+        action: 'SUBMITTED',
+        previousStatus: undefined,
+        newStatus: this.status || 'Pending',
+        changedBy: this.createdBy || this.employee || 'Employee',
+        changedByRole: 'Requester',
+        timestamp: new Date().toISOString(),
+        remarks: 'Request submitted for review',
+      },
+    ];
+  }
   next();
 });
 

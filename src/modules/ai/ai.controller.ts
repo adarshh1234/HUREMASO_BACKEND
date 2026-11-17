@@ -119,6 +119,21 @@ export class AIController {
     }
   };
 
+  deleteFlightRisk = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = getParam(req.params, 'id');
+      const data = await this.service.deleteFlightRisk(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Flight risk record deleted successfully',
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   predictFlightRisk = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const data = await this.service.evaluateEmployeeFlightRisk(req.body || {});
@@ -246,9 +261,8 @@ export class AIController {
   getConversation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const conversationId = req.query.conversationId ? String(req.query.conversationId) : 'default-chat';
-      const userId = (req.user as any)?.id || 'user-1';
-      const userName = (req.user as any)?.name || 'Sarah Joseph';
-      const data = await this.service.getConversation(conversationId, userId, userName);
+      const user = req.authUser || (req.user as any) || { id: 'user-1', name: 'Sarah Joseph', role: 'Admin' };
+      const data = await this.service.getConversation(conversationId, user.id, user.name, user.role);
       sendResponse({
         res,
         statusCode: 200,
@@ -263,7 +277,12 @@ export class AIController {
   sendChatMessage = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const parsed = sendChatMessageSchema.parse(req.body);
-      const data = await this.service.sendChatMessage(parsed);
+      const user = req.authUser || (req.user as any) || { id: 'user-1', name: 'Sarah Joseph', role: 'Admin' };
+      const data = await this.service.sendChatMessage({
+        ...parsed,
+        userId: parsed.userId || user.id,
+        userName: parsed.userName || user.name,
+      }, user.role);
       sendResponse({
         res,
         statusCode: 200,
@@ -278,7 +297,8 @@ export class AIController {
   clearConversation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const conversationId = req.body?.conversationId || (req.query?.conversationId ? String(req.query.conversationId) : 'default-chat');
-      const data = await this.service.clearConversation(conversationId);
+      const user = req.authUser || (req.user as any) || { id: 'user-1', name: 'Sarah Joseph', role: 'Admin' };
+      const data = await this.service.clearConversation(conversationId, user.id, user.role);
       sendResponse({
         res,
         statusCode: 200,
@@ -311,6 +331,50 @@ export class AIController {
         res,
         statusCode: 200,
         message: 'AI Knowledge Base synchronized with global entities',
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listKnowledgeDocuments = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const data = await this.service.listKnowledgeDocuments();
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Knowledge Base documents retrieved successfully',
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listKnowledgeChunks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const documentId = req.query.documentId ? String(req.query.documentId) : undefined;
+      const data = await this.service.listKnowledgeChunks(documentId);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Knowledge Base chunks retrieved successfully',
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  searchKnowledgeBase = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const query = String(req.query.q || req.body?.q || req.body?.query || '');
+      const data = await this.service.searchKnowledgeBase(query);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Knowledge Base search executed successfully',
         data,
       });
     } catch (error) {

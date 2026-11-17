@@ -1,11 +1,22 @@
 import { z } from 'zod';
 import mongoose from 'mongoose';
-import { NotificationChannel, RecipientType, NotificationStatus } from './notification.types';
+import { NotificationChannel, RecipientType, NotificationStatus, AnnouncementCategory } from './notification.types';
 
 export const mongoIdSchema = z.string().refine(
   (val) => mongoose.Types.ObjectId.isValid(val),
   { message: 'Invalid notification ID format' }
 );
+
+export const announcementCategories = [
+  'General Announcement',
+  'HR Announcement',
+  'Company News',
+  'Policy Update',
+  'Emergency Notice',
+  'Event Announcement',
+] as const;
+
+export const announcementCategorySchema = z.enum(announcementCategories);
 
 export const createNotificationSchema = z.object({
   channel: z.nativeEnum(NotificationChannel, {
@@ -17,6 +28,7 @@ export const createNotificationSchema = z.object({
   recipientType: z.nativeEnum(RecipientType).optional().default(RecipientType.ALL_EMPLOYEES),
   departmentIds: z.array(z.string()).optional().default([]),
   employeeIds: z.array(z.string()).optional().default([]),
+  announcementCategory: announcementCategorySchema.optional(),
   status: z.nativeEnum(NotificationStatus).optional().default(NotificationStatus.DRAFT),
   createdBy: z.string().optional(),
 });
@@ -31,6 +43,10 @@ export const queryNotificationSchema = z.object({
   status: z.nativeEnum(NotificationStatus).optional(),
   sortBy: z.enum(['createdAt', 'updatedAt', 'channel', 'status', 'recipientType', 'subject']).optional().default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
+});
+
+export const recipientsQuerySchema = z.object({
+  channel: z.nativeEnum(NotificationChannel).optional().default(NotificationChannel.EMAIL),
 });
 
 export const notificationIdParamSchema = z.object({

@@ -11,6 +11,28 @@ export class ResumeController {
     }
   }
 
+  async getMetrics(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await resumeService.getMetrics();
+      res.status(200).json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async syncLetsGetIn(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await resumeService.syncLetsGetInResumes();
+      res.status(200).json({
+        success: true,
+        message: 'Successfully synchronized verified talent pool from LetsGetIn network',
+        data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getAll(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await resumeService.getAllResumes(req.query as any);

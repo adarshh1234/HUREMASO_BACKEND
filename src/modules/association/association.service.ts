@@ -4,6 +4,7 @@ import {
   UpdateAssociationInput,
   ApproveRejectAssociationInput,
   DeactivateAssociationInput,
+  RenewAssociationInput,
   AssociationQueryFilterInput,
 } from './association.validator';
 import { IAssociationDocument, IAssociationOverviewStats } from './association.types';
@@ -54,10 +55,30 @@ export class AssociationService {
   }
 
   async createRequest(input: CreateAssociationRequestInput): Promise<IAssociationDocument> {
-    const associationCode = await this.repository.getNextCode();
     const employeeName = input.employeeName || input.name || 'Anonymous Employee';
+    const targetDepartment = input.targetDepartment || 'Marketing Department';
+    const associatedEntity = input.associatedEntity || 'Huremaso Global Tech';
+
+    // Duplicate submission prevention
+    const existingPending = await this.repository.findPendingDuplicate(employeeName, targetDepartment);
+
+    if (existingPending) {
+      throw AppError.badRequest(
+        `A pending association request already exists for ${employeeName} with ${targetDepartment}.`
+      );
+    }
+
+    const associationCode = await this.repository.getNextCode();
     const requestDetails = input.requestDetails || input.text || '';
     const dateRequested = input.dateRequested || input.date || this.formatDate();
+
+    const durationMonths = input.durationMonths || 6;
+    let expiryDate = input.expiryDate || '';
+    if (!expiryDate) {
+      const exp = new Date();
+      exp.setMonth(exp.getMonth() + durationMonths);
+      expiryDate = this.formatDate(exp);
+    }
 
     const newDoc = await this.repository.create({
       associationCode,
@@ -66,14 +87,16 @@ export class AssociationService {
       requesterEmail: input.requesterEmail || '',
       requesterAvatar: input.requesterAvatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
       department: input.department || 'General',
-      targetDepartment: input.targetDepartment || 'Marketing Department',
-      associatedEntity: input.associatedEntity || 'Huremaso Global Tech',
+      targetDepartment,
+      associatedEntity,
       associationType: input.associationType || 'Project Collaboration',
       requestDetails,
       status: 'Pending',
       dateRequested,
-      effectiveDate: input.effectiveDate || '',
-      expiryDate: input.expiryDate || '',
+      effectiveDate: input.effectiveDate || this.formatDate(),
+      expiryDate,
+      durationMonths,
+      attachments: input.attachments || [],
       notes: input.notes || '',
       isExisting: false,
       history: [
@@ -82,7 +105,7 @@ export class AssociationService {
           action: 'Association Request Submitted',
           performedBy: employeeName,
           timestamp: new Date().toISOString(),
-          details: `Request created for ${input.targetDepartment || 'target department'}.`,
+          details: `Request created for ${targetDepartment}.`,
         },
       ],
     });
@@ -248,6 +271,44 @@ export class AssociationService {
 
     if (!updated) {
       throw AppError.notFound(`Failed to deactivate association '${id}'`);
+    }
+
+    return updated;
+  }
+
+  async renewExisting(id: string, input: RenewAssociationInput): Promise<IAssociationDocument> {
+    const doc = await this.repository.findById(id);
+    if (!doc) {
+      throw AppError.notFound(`Existing association with id '${id}' not found`);
+    }
+
+    const performer = input.performedBy || 'System Admin';
+    const months = input.durationMonths || 6;
+    let newExpiry = input.expiryDate;
+    if (!newExpiry) {
+      const base = doc.expiryDate ? new Date(doc.expiryDate) : new Date();
+      base.setMonth(base.getMonth() + months);
+      newExpiry = this.formatDate(base);
+    }
+
+    const historyEntry = {
+      id: String(doc.history.length + 1),
+      action: 'Association Renewed & Extended',
+      performedBy: performer,
+      timestamp: new Date().toISOString(),
+      details: input.notes || `Association extended for ${months} months through ${newExpiry}.`,
+    };
+
+    const updated = await this.repository.update(id, {
+      expiryDate: newExpiry,
+      durationMonths: months,
+      status: 'Active',
+      isExisting: true,
+      history: [...doc.history, historyEntry],
+    });
+
+    if (!updated) {
+      throw AppError.notFound(`Failed to renew association '${id}'`);
     }
 
     return updated;

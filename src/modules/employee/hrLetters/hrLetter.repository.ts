@@ -4,6 +4,7 @@ import {
   IHrCommunication,
   IIssuedLetter,
   CommunicationQueryParams,
+  HRLetterStatsSummary,
 } from './hrLetter.types';
 
 export class HrLetterRepository {
@@ -29,7 +30,7 @@ export class HrLetterRepository {
           category: 'Offer' as const,
           type: 'letters' as const,
           subject: 'Job Offer – {{employeeName}}',
-          body: 'Dear {{employeeName}},\n\nWe are excited to offer you the position of {{jobTitle}} with {{companyName}}. We were very impressed by your skills and experience and believe you will be a valuable addition to our team...',
+          body: 'Dear {{employeeName}},\n\nWe are excited to offer you the position of {{jobTitle}} with {{companyName}}. We were very impressed by your skills and experience and believe you will be a valuable addition to our team.\n\nYour compensation and benefits details are attached with this official offer letter. We look forward to welcoming you aboard.',
           message: 'Dear [Employee Name],\n\nWe are excited to offer you the position of [Job Title] with [Company Name]. We were very impressed by your skills and experience and believe you will be a valuable addition to our team...',
           variables: ['[Employee Name]', '[Company Name]', '[Job Title]', '{{employeeName}}', '{{companyName}}', '{{jobTitle}}'],
           isActive: true,
@@ -39,7 +40,7 @@ export class HrLetterRepository {
           category: 'Relieving' as const,
           type: 'letters' as const,
           subject: 'Relieving Letter – {{employeeName}}',
-          body: 'Dear {{employeeName}},\n\nThis is in reference to your resignation letter dated {{resignationDate}}. We would like to inform you that you are relieved from your services as {{jobTitle}} at the close of business hours on {{relievingDate}}...',
+          body: 'Dear {{employeeName}},\n\nThis is in reference to your resignation letter dated {{resignationDate}}. We would like to inform you that you are relieved from your services as {{jobTitle}} at the close of business hours on {{relievingDate}}.\n\nWe confirm that you have completed all handover responsibilities and your full and final settlement has been processed satisfactorily.',
           message: 'Dear [Employee Name],\n\nThis is in reference to your resignation letter dated [Resignation Date]. We would like to inform you that you are relieved from your services as [Job Title] at the close of business hours on [Relieving Date]...',
           variables: ['[Employee Name]', '[Job Title]', '[Resignation Date]', '[Relieving Date]', '{{employeeName}}', '{{jobTitle}}', '{{resignationDate}}', '{{relievingDate}}'],
           isActive: true,
@@ -49,9 +50,29 @@ export class HrLetterRepository {
           category: 'Experience' as const,
           type: 'letters' as const,
           subject: 'Experience Certificate – {{employeeName}}',
-          body: 'To Whom It May Concern,\n\nThis is to certify that {{employeeName}} was employed with {{companyName}} as a {{jobTitle}} from {{startDate}} to {{endDate}}. During their tenure with us, we found them to be hard-working, honest, and dedicated to their duties...',
+          body: 'To Whom It May Concern,\n\nThis is to certify that {{employeeName}} was employed with {{companyName}} as a {{jobTitle}} from {{startDate}} to {{endDate}}. During their tenure with us, we found them to be hard-working, honest, and dedicated to their duties.\n\nWe wish them all the best in their future career endeavors.',
           message: 'To Whom It May Concern,\n\nThis is to certify that [Employee Name] was employed with [Company Name] as a [Job Title] from [Start Date] to [End Date]. During their tenure with us, we found them to be hard-working, honest, and dedicated to their duties...',
           variables: ['[Employee Name]', '[Company Name]', '[Job Title]', '[Start Date]', '[End Date]', '{{employeeName}}', '{{companyName}}', '{{jobTitle}}', '{{startDate}}', '{{endDate}}'],
+          isActive: true,
+        },
+        {
+          name: 'Warning Letter',
+          category: 'Warning' as const,
+          type: 'letters' as const,
+          subject: 'Formal Warning Notice – {{employeeName}}',
+          body: 'Dear {{employeeName}},\n\nThis letter serves as an official written warning regarding non-compliance with company policy. Continued failure to meet organizational expectations may lead to further disciplinary action up to and including termination of employment.\n\nPlease discuss your remediation plan with your reporting manager within 5 business days.',
+          message: 'Dear [Employee Name],\n\nThis letter serves as an official written warning regarding non-compliance with company policy...',
+          variables: ['[Employee Name]', '[Company Name]', '{{employeeName}}'],
+          isActive: true,
+        },
+        {
+          name: 'Promotion Letter',
+          category: 'Promotion' as const,
+          type: 'letters' as const,
+          subject: 'Promotion & Title Revision – {{employeeName}}',
+          body: 'Dear {{employeeName}},\n\nIn recognition of your exceptional contributions and dedication to {{companyName}}, the management is delighted to promote you to {{jobTitle}}, effective from {{joiningDate}}.\n\nCongratulations on this well-deserved milestone in your career journey with us!',
+          message: 'Dear [Employee Name],\n\nIn recognition of your exceptional contributions...',
+          variables: ['[Employee Name]', '[Company Name]', '[Job Title]', '{{employeeName}}', '{{jobTitle}}'],
           isActive: true,
         },
       ];
@@ -96,6 +117,10 @@ export class HrLetterRepository {
       filter.status = params.status;
     }
 
+    if (params.priority && params.priority !== 'all') {
+      filter.priority = params.priority;
+    }
+
     if (params.department && params.department !== 'all') {
       filter.$or = [
         { department: new RegExp(params.department, 'i') },
@@ -104,81 +129,119 @@ export class HrLetterRepository {
       ];
     }
 
-    if (params.search) {
-      const searchRegex = new RegExp(params.search, 'i');
-      filter.$or = [
+    if (params.search && params.search.trim() !== '') {
+      const searchRegex = new RegExp(params.search.trim(), 'i');
+      const searchCondition = [
+        { referenceNumber: searchRegex },
         { title: searchRegex },
+        { subject: searchRegex },
         { content: searchRegex },
         { author: searchRegex },
         { createdBy: searchRegex },
         { department: searchRegex },
         { recipient: searchRegex },
+        { employeeId: searchRegex },
       ];
+
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchCondition }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchCondition;
+      }
     }
 
     const sortField = params.sortBy || 'createdAt';
     const sortDir = params.sortOrder === 'asc' ? 1 : -1;
 
-    const comms = await HrCommunicationModel.find(filter).sort({ [sortField]: sortDir });
+    let query = HrCommunicationModel.find(filter).sort({ [sortField]: sortDir });
+
+    if (params.page && params.limit) {
+      const pageNum = Number(params.page);
+      const limitNum = Number(params.limit);
+      if (pageNum > 0 && limitNum > 0) {
+        query = query.skip((pageNum - 1) * limitNum).limit(limitNum);
+      }
+    }
+
+    const comms = await query.exec();
 
     if (comms.length === 0 && Object.keys(filter).length === 0) {
       const sample = [
         {
+          referenceNumber: 'MEMO-2026-0041',
           type: 'memo' as const,
           title: 'Q3 Hybrid Work & Office Policy Update',
-          content: 'Official guidelines and policies regarding hybrid working arrangements for Q3.',
+          subject: 'Q3 Hybrid Work & Office Policy Update',
+          content: 'Official corporate guidelines regarding hybrid working arrangements for Q3. All departments are required to schedule minimum 3 office days per week.',
           author: 'HR Director',
           createdBy: 'HR Director',
-          department: 'All Departments',
-          dept: 'All Departments',
-          targetAudience: 'All Staff',
+          department: 'Engineering',
+          dept: 'Engineering',
+          targetAudience: 'Engineering Staff',
+          priority: 'High' as const,
           status: 'Published' as const,
+          effectiveDate: '2026-09-01',
           issuedDate: 'August 25, 2026',
           date: 'August 25, 2026',
         },
         {
+          referenceNumber: 'MEMO-2026-0042',
           type: 'memo' as const,
           title: 'Security Pass & Visitor Access Protocol',
-          content: 'Updated biometric badges and security access protocols for office entry.',
+          subject: 'Security Pass & Visitor Access Protocol',
+          content: 'Updated biometric badges and security access protocols for office entry across all corporate technology parks.',
           author: 'IT Operations',
           createdBy: 'IT Operations',
           department: 'Operations',
           dept: 'Operations',
           targetAudience: 'All Employees',
+          priority: 'Medium' as const,
           status: 'Published' as const,
+          effectiveDate: '2026-09-05',
           issuedDate: 'August 10, 2026',
           date: 'August 10, 2026',
         },
         {
+          referenceNumber: 'NOT-2026-0102',
           type: 'notice' as const,
           title: 'Labor Day Public Holiday Announcement',
-          content: 'Office holiday schedule and emergency contacts for the upcoming Labor Day.',
+          subject: 'Labor Day Public Holiday Announcement',
+          content: 'Office holiday schedule and emergency contacts for the upcoming official Labor Day public holiday.',
           author: 'HR Operations',
           createdBy: 'HR Operations',
           department: 'General',
           dept: 'General',
           targetAudience: 'All Staff',
-          status: 'Active' as const,
+          priority: 'Low' as const,
+          status: 'Published' as const,
+          effectiveDate: '2026-09-07',
           issuedDate: 'August 28, 2026',
           date: 'August 28, 2026',
         },
         {
+          referenceNumber: 'CIR-2026-0089',
           type: 'circular' as const,
           title: 'Q4 Engineering Code Sprint & Hackathon',
-          content: 'Registration and guidelines for the upcoming annual Engineering Hackathon.',
+          subject: 'Q4 Engineering Code Sprint & Hackathon',
+          content: 'Registration procedures, judging criteria and timeline for the upcoming annual Engineering Innovation Hackathon.',
           author: 'CTO Office',
           createdBy: 'CTO Office',
           department: 'Engineering',
           dept: 'Engineering',
           targetAudience: 'Engineering Staff',
+          priority: 'Medium' as const,
           status: 'Published' as const,
+          effectiveDate: '2026-10-15',
           issuedDate: 'August 22, 2026',
           date: 'August 22, 2026',
         },
         {
+          referenceNumber: 'LTR-2026-0012',
           type: 'letters' as const,
           title: 'Experience & Conduct Certificate',
-          content: 'This is to certify Sarah Johnson was employed as a Senior Engineer with excellent conduct.',
+          subject: 'Experience Certificate – Sarah Johnson',
+          content: 'This is to certify Sarah Johnson was employed as a Senior Full Stack Engineer with outstanding contributions and high professional integrity.',
           author: 'HR Management',
           createdBy: 'HR Management',
           department: 'Software Engineering',
@@ -186,7 +249,9 @@ export class HrLetterRepository {
           recipient: 'Sarah Johnson',
           employeeTarget: 'EMP2024001',
           employeeId: 'EMP2024001',
+          priority: 'Medium' as const,
           status: 'Completed' as const,
+          effectiveDate: '2026-08-26',
           issuedDate: 'August 26, 2026',
           date: 'August 26, 2026',
         },
@@ -223,10 +288,14 @@ export class HrLetterRepository {
     if (records.length === 0 && Object.keys(filter).length === 0) {
       const sample = [
         {
+          referenceNumber: 'LTR-2026-0012',
           employeeId: 'EMP2024001',
+          employeeName: 'Sarah Johnson',
+          designation: 'Senior Full Stack Engineer',
+          department: 'Software Engineering',
           letterType: 'Experience & Conduct Certificate',
           subject: 'Experience Certificate – Sarah Johnson',
-          content: 'This is to certify Sarah Johnson was employed as a Senior Full Stack Engineer with outstanding contributions.',
+          content: 'This is to certify Sarah Johnson was employed as a Senior Full Stack Engineer with outstanding contributions and high professional integrity.',
           issuedDate: new Date().toISOString().split('T')[0],
           issuedBy: 'HR Management',
           createdBy: 'HR Management',
@@ -254,6 +323,51 @@ export class HrLetterRepository {
   async deleteIssuedLetter(id: string): Promise<boolean> {
     const res = await IssuedLetterModel.findByIdAndDelete(id);
     return !!res;
+  }
+
+  // ==========================================
+  // STATS & COUNTS SUMMARY
+  // ==========================================
+  async getCountsSummary(): Promise<HRLetterStatsSummary> {
+    const [
+      memos,
+      notices,
+      circulars,
+      commLetters,
+      issuedRecords,
+      commDrafts,
+      recordDrafts,
+      commPublished,
+      recordPublished,
+      archived,
+    ] = await Promise.all([
+      HrCommunicationModel.countDocuments({ type: 'memo' }),
+      HrCommunicationModel.countDocuments({ type: 'notice' }),
+      HrCommunicationModel.countDocuments({ type: 'circular' }),
+      HrCommunicationModel.countDocuments({ type: { $in: ['letter', 'letters'] } }),
+      IssuedLetterModel.countDocuments({}),
+      HrCommunicationModel.countDocuments({ status: 'Draft' }),
+      IssuedLetterModel.countDocuments({ status: 'Draft' }),
+      HrCommunicationModel.countDocuments({ status: { $in: ['Published', 'Active'] } }),
+      IssuedLetterModel.countDocuments({ status: { $in: ['Issued', 'Published', 'Signed'] } }),
+      HrCommunicationModel.countDocuments({ status: 'Archived' }),
+    ]);
+
+    const totalLetters = commLetters + issuedRecords;
+    const drafts = commDrafts + recordDrafts;
+    const published = commPublished + recordPublished;
+    const total = memos + notices + circulars + totalLetters;
+
+    return {
+      total,
+      memos,
+      notices,
+      circulars,
+      letters: totalLetters,
+      drafts,
+      published,
+      archived,
+    };
   }
 }
 

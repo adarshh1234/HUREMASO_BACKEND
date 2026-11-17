@@ -1,6 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { analyticsService, AnalyticsService } from './analytics.service';
-import { reportQuerySchema, analyticsQuerySchema, employeeOfPeriodQuerySchema } from './analytics.validator';
+import {
+  reportQuerySchema,
+  analyticsQuerySchema,
+  employeeOfPeriodQuerySchema,
+  approveWinnerSchema,
+  exportQuerySchema,
+} from './analytics.validator';
 import { sendResponse } from '../../common/utils/apiResponse';
 
 export class AnalyticsController {
@@ -204,6 +210,22 @@ export class AnalyticsController {
     }
   };
 
+  getTasksReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parsed = reportQuerySchema.parse(req.query);
+      const data = await this.service.getTasksReport(parsed);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Tasks report retrieved successfully',
+        data,
+        pagination: data.pagination,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   // ================= 2. ANALYTICS HANDLERS =================
 
   getEmployeeOverview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -362,6 +384,80 @@ export class AnalyticsController {
         message: 'Executive dashboard analytics retrieved successfully',
         data,
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ================= 3. RECOGNITION STUDIO & APPROVALS =================
+
+  getRecognitionCandidates = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const periodType = ((req.query.periodType || req.query.period || 'month') as string).toLowerCase() as
+        | 'week'
+        | 'month'
+        | 'year';
+      const department = req.query.department as string | undefined;
+      const data = await this.service.getRecognitionCandidates(periodType, department);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Recognition candidates retrieved successfully',
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  approveWinner = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parsed = approveWinnerSchema.parse(req.body);
+      const data = await this.service.approveWinner(parsed);
+      sendResponse({
+        res,
+        statusCode: 201,
+        message: 'Recognition winner approved and persisted successfully',
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getApprovedWinners = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const periodType = req.query.periodType as string | undefined;
+      const data = await this.service.getApprovedWinners(periodType);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Approved recognition winners retrieved successfully',
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ================= 4. UNIFIED EXPORT ENGINE =================
+
+  exportReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const reportType = (req.params.reportType || req.query.reportType || 'employees') as string;
+      const parsed = exportQuerySchema.parse({ ...req.query, ...req.body });
+      const format = (parsed.format || req.query.format || req.body.format || 'csv').toString().toLowerCase();
+
+      const result = await this.service.exportReport(reportType, format, parsed);
+
+      res.setHeader('Content-Type', result.contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      if (Buffer.isBuffer(result.buffer)) {
+        res.setHeader('Content-Length', result.buffer.length);
+        res.end(result.buffer);
+      } else {
+        res.status(200).send(result.buffer);
+      }
     } catch (error) {
       next(error);
     }

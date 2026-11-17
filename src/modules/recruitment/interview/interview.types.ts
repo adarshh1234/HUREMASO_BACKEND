@@ -94,8 +94,11 @@ export type RecommendationType = 'Strong Hire' | 'Hire' | 'Hold' | 'Reject';
 
 export interface IFeedback {
   _id?: string | Types.ObjectId;
-  interviewId: Types.ObjectId | any;
-  candidateId: Types.ObjectId | any;
+  interviewId?: Types.ObjectId | any;
+  candidateId?: Types.ObjectId | any;
+  candidateName?: string;
+  position?: string;
+  interviewDate?: string;
   interviewerName: string;
   interviewerEmployeeId?: Types.ObjectId | any;
   technicalRating?: number;
@@ -114,8 +117,11 @@ export interface IFeedback {
 export type IFeedbackDocument = Document & IFeedback;
 
 export interface CreateFeedbackDTO {
-  interviewId: string;
-  candidateId: string;
+  interviewId?: string;
+  candidateId?: string;
+  candidateName?: string;
+  position?: string;
+  interviewDate?: string;
   interviewerName: string;
   interviewerEmployeeId?: string;
   technicalRating?: number;

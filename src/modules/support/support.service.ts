@@ -11,7 +11,10 @@ import {
   ISupportContactRequestDocument,
   ISupportQueryFilter,
   ISupportDashboardMetrics,
+  ISupportAgent,
   ITicketComment,
+  ITicketInternalNote,
+  ITicketHistoryEntry,
   TicketStatus,
 } from './support.types';
 import { AppError } from '../../common/errors/AppError';
@@ -26,78 +29,133 @@ export class SupportService {
   // ================= 1. DASHBOARD METRICS =================
 
   async getDashboardMetrics(): Promise<ISupportDashboardMetrics> {
-    await this.seedDefaultsIfEmpty();
     const raw = await this.repo.getTicketDashboardAggregates();
 
     let openTickets = 0;
     let pendingTickets = 0;
     let resolvedTickets = 0;
     let closedTickets = 0;
+    let reopenedTickets = 0;
 
     raw.statusAgg.forEach((item: { _id: string; count: number }) => {
       if (item._id === 'Open' || item._id === 'In Progress') openTickets += item.count;
       else if (item._id === 'Pending') pendingTickets += item.count;
       else if (item._id === 'Resolved') resolvedTickets += item.count;
       else if (item._id === 'Closed') closedTickets += item.count;
+      else if (item._id === 'Reopened') reopenedTickets += item.count;
     });
 
-    const total = raw.totalCount || 1;
+    const total = raw.totalCount || 0;
 
-    const categoryBreakdown = raw.categoryAgg.map((item: { _id: string; count: number }) => ({
-      category: item._id || 'Other',
-      count: item.count,
-      percentage: parseFloat(((item.count / total) * 100).toFixed(1)),
-    }));
+    // SLA Calculation & Average Response/Resolution Times from real records
+    let totalResponseHours = 0;
+    let respondedTicketsCount = 0;
+    let totalResolutionHours = 0;
+    let resolvedTicketsCount = 0;
+    let slaCompliantCount = 0;
 
-    const priorityBreakdown = raw.priorityAgg.map((item: { _id: string; count: number }) => ({
-      priority: item._id || 'Medium',
-      count: item.count,
-      percentage: parseFloat(((item.count / total) * 100).toFixed(1)),
-    }));
+    const now = Date.now();
+    (raw.allTickets || []).forEach((t: any) => {
+      const createdTime = t.createdAt ? new Date(t.createdAt).getTime() : now;
 
-    const recentTickets = raw.recentTickets.map((t: any) => ({
+      // Response Time
+      if (t.firstResponseAt) {
+        const responseTime = (new Date(t.firstResponseAt).getTime() - createdTime) / (1000 * 3600);
+        if (responseTime >= 0) {
+          totalResponseHours += responseTime;
+          respondedTicketsCount++;
+        }
+      }
+
+      // Resolution Time
+      if (t.resolvedAt) {
+        const resolutionTime = (new Date(t.resolvedAt).getTime() - createdTime) / (1000 * 3600);
+        if (resolutionTime >= 0) {
+          totalResolutionHours += resolutionTime;
+          resolvedTicketsCount++;
+        }
+      }
+
+      // SLA Compliance
+      if (t.slaDueAt) {
+        const dueTime = new Date(t.slaDueAt).getTime();
+        if (t.resolvedAt) {
+          if (new Date(t.resolvedAt).getTime() <= dueTime) {
+            slaCompliantCount++;
+          }
+        } else if (['Open', 'In Progress', 'Pending', 'Reopened'].includes(t.status)) {
+          if (now <= dueTime) {
+            slaCompliantCount++;
+          }
+        } else {
+          slaCompliantCount++;
+        }
+      } else {
+        slaCompliantCount++;
+      }
+    });
+
+    const averageResponseTimeHours = respondedTicketsCount > 0
+      ? parseFloat((totalResponseHours / respondedTicketsCount).toFixed(1))
+      : 0;
+
+    const averageResolutionTimeHours = resolvedTicketsCount > 0
+      ? parseFloat((totalResolutionHours / resolvedTicketsCount).toFixed(1))
+      : 0;
+
+    const slaAdherenceRate = total > 0
+      ? parseFloat(((slaCompliantCount / total) * 100).toFixed(1))
+      : 100;
+
+    const categoryBreakdown = total > 0
+      ? raw.categoryAgg.map((item: { _id: string; count: number }) => ({
+          category: item._id || 'Other',
+          count: item.count,
+          percentage: parseFloat(((item.count / total) * 100).toFixed(1)),
+        }))
+      : [];
+
+    const priorityBreakdown = total > 0
+      ? raw.priorityAgg.map((item: { _id: string; count: number }) => ({
+          priority: item._id || 'Medium',
+          count: item.count,
+          percentage: parseFloat(((item.count / total) * 100).toFixed(1)),
+        }))
+      : [];
+
+    const recentTickets = (raw.recentTickets || []).map((t: any) => ({
       id: t._id?.toString() || t.id,
-      ticketNumber: t.ticketNumber || '#TCK-1000',
+      ticketNumber: t.ticketNumber || `#TCK-${t.id || '1000'}`,
       requesterName: t.requesterName || 'Employee',
       department: t.department || 'General',
       subject: t.subject || 'Support Request',
       category: t.category || 'IT Support',
       priority: t.priority || 'Medium',
       status: t.status || 'Open',
+      assignedAgent: t.assignedAgent || 'Unassigned',
       lastUpdated: t.updatedAt ? new Date(t.updatedAt).toLocaleDateString() : 'Recent',
     }));
 
     return {
-      openTickets: openTickets || 4,
-      pendingTickets: pendingTickets || 2,
-      resolvedTickets: resolvedTickets || 12,
-      closedTickets: closedTickets || 8,
-      totalTickets: raw.totalCount || 26,
-      averageResponseTimeHours: 1.4,
-      averageResolutionTimeHours: 4.8,
-      slaAdherenceRate: 98.4,
-      categoryBreakdown: categoryBreakdown.length > 0 ? categoryBreakdown : [
-        { category: 'Access / Permissions', count: 8, percentage: 30.8 },
-        { category: 'Software', count: 7, percentage: 26.9 },
-        { category: 'IT Support', count: 5, percentage: 19.2 },
-        { category: 'Hardware', count: 4, percentage: 15.4 },
-        { category: 'Facilities', count: 2, percentage: 7.7 },
-      ],
-      priorityBreakdown: priorityBreakdown.length > 0 ? priorityBreakdown : [
-        { priority: 'Urgent', count: 2, percentage: 7.7 },
-        { priority: 'High', count: 8, percentage: 30.8 },
-        { priority: 'Medium', count: 12, percentage: 46.1 },
-        { priority: 'Low', count: 4, percentage: 15.4 },
-      ],
+      openTickets,
+      pendingTickets,
+      resolvedTickets,
+      closedTickets,
+      reopenedTickets,
+      unassignedTickets: raw.unassignedCount || 0,
+      totalTickets: total,
+      averageResponseTimeHours,
+      averageResolutionTimeHours,
+      slaAdherenceRate,
+      categoryBreakdown,
+      priorityBreakdown,
       recentTickets,
     };
   }
 
   // ================= 2. TICKETS SERVICE =================
 
-  async listTickets(filterParams: ISupportQueryFilter) {
-    await this.seedDefaultsIfEmpty();
-
+  async listTickets(filterParams: ISupportQueryFilter & { assignedAgent?: string; requesterEmail?: string }) {
     const page = filterParams.page || 1;
     const limit = filterParams.limit || 10;
     const skip = (page - 1) * limit;
@@ -116,8 +174,14 @@ export class SupportService {
     if (filterParams.department && filterParams.department !== 'All') {
       filter.department = filterParams.department;
     }
+    if (filterParams.assignedAgent && filterParams.assignedAgent !== 'All') {
+      filter.assignedAgent = filterParams.assignedAgent;
+    }
+    if (filterParams.requesterEmail) {
+      filter.requesterEmail = filterParams.requesterEmail.toLowerCase().trim();
+    }
     if (filterParams.search) {
-      const q = filterParams.search;
+      const q = filterParams.search.trim();
       filter.$or = [
         { ticketNumber: { $regex: q, $options: 'i' } },
         { subject: { $regex: q, $options: 'i' } },
@@ -125,7 +189,13 @@ export class SupportService {
         { requesterEmail: { $regex: q, $options: 'i' } },
         { description: { $regex: q, $options: 'i' } },
         { category: { $regex: q, $options: 'i' } },
+        { assignedAgent: { $regex: q, $options: 'i' } },
       ];
+    }
+    if (filterParams.fromDate || filterParams.toDate) {
+      filter.createdAt = {};
+      if (filterParams.fromDate) filter.createdAt.$gte = new Date(filterParams.fromDate);
+      if (filterParams.toDate) filter.createdAt.$lte = new Date(filterParams.toDate);
     }
 
     const { total, records } = await this.repo.findTickets(filter, skip, limit);
@@ -151,58 +221,182 @@ export class SupportService {
   }
 
   async createTicket(payload: Partial<ISupportTicket>) {
+    if (!payload.subject || !payload.subject.trim()) {
+      throw new AppError('Ticket subject is required', 400);
+    }
+    if (!payload.description || payload.description.trim().length < 5) {
+      throw new AppError('Ticket description is required with at least 5 characters', 400);
+    }
+    if (!payload.requesterEmail || !payload.requesterEmail.trim()) {
+      throw new AppError('Requester email is required', 400);
+    }
+
+    // Duplicate Check: Same requester and subject in active status
+    const existingDuplicate = await this.repo.findOpenTicketByRequesterAndSubject(
+      payload.requesterEmail,
+      payload.subject
+    );
+    if (existingDuplicate) {
+      throw new AppError(
+        `A support ticket with this subject is already active for ${payload.requesterEmail} (${existingDuplicate.ticketNumber}). Please update the existing ticket.`,
+        409
+      );
+    }
+
     const count = await this.repo.countTickets();
-    const ticketNumber = `#TCK-${1001 + count}`;
+    let ticketNumCandidate = `#TCK-${1001 + count}`;
+    // Verify uniqueness of ticketNumber
+    let existingTicketWithNum = await this.repo.findTicketByNumber(ticketNumCandidate);
+    let offset = 1;
+    while (existingTicketWithNum) {
+      ticketNumCandidate = `#TCK-${1001 + count + offset}`;
+      existingTicketWithNum = await this.repo.findTicketByNumber(ticketNumCandidate);
+      offset++;
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // SLA Calculation based on priority
+    const priority = payload.priority || 'Medium';
+    const slaHours = priority === 'Urgent' ? 4 : priority === 'High' ? 8 : priority === 'Low' ? 48 : 24;
+    const slaDueAt = new Date(Date.now() + slaHours * 3600 * 1000).toISOString();
+
+    const requesterName = payload.requesterName || 'Employee';
 
     const initialComment: ITicketComment = {
       id: String(Date.now()),
-      author: payload.requesterName || 'Employee',
+      author: requesterName,
       authorEmail: payload.requesterEmail,
       role: 'Requester',
       text: payload.description || 'Initial ticket submitted',
       timestamp: new Date().toLocaleString(),
     };
 
-    const newTicketData = {
+    const initialHistory: ITicketHistoryEntry = {
+      id: String(Date.now()),
+      action: 'CREATED',
+      performedBy: requesterName,
+      timestamp: nowIso,
+      details: `Ticket created with priority '${priority}' in category '${payload.category || 'IT Support'}'`,
+    };
+
+    const newTicketData: Partial<ISupportTicket> = {
       ...payload,
-      ticketNumber,
+      ticketNumber: ticketNumCandidate,
       status: payload.status || 'Open',
-      priority: payload.priority || 'Medium',
+      priority,
       category: payload.category || 'IT Support',
-      assignedAgent: payload.assignedAgent || 'David Vance (IT Ops)',
+      assignedAgent: payload.assignedAgent || 'Unassigned',
+      slaDueAt,
       comments: [initialComment],
+      history: [initialHistory],
+      internalNotes: [],
+      tags: payload.tags || [],
     };
 
     return this.repo.createTicket(newTicketData);
   }
 
-  async updateTicket(id: string, payload: Partial<ISupportTicket>) {
+  async updateTicket(id: string, payload: Partial<ISupportTicket>, updatedBy: string = 'User') {
     const existing = await this.repo.findTicketById(id);
     if (!existing) {
       throw new AppError(`Ticket with ID ${id} not found`, 404);
     }
 
-    if (payload.status === 'Resolved' && existing.status !== 'Resolved') {
-      payload.resolvedAt = new Date().toISOString();
-    } else if (payload.status === 'Closed' && existing.status !== 'Closed') {
-      payload.closedAt = new Date().toISOString();
+    const nowIso = new Date().toISOString();
+
+    if (payload.status && payload.status !== existing.status) {
+      if (payload.status === 'Resolved') {
+        payload.resolvedAt = nowIso;
+      } else if (payload.status === 'Closed') {
+        payload.closedAt = nowIso;
+      } else if (payload.status === 'Reopened') {
+        payload.reopenedAt = nowIso;
+        payload.resolvedAt = undefined;
+        payload.closedAt = undefined;
+      }
+
+      await this.repo.addHistoryToTicket(id, {
+        id: String(Date.now()),
+        action: 'STATUS_CHANGED',
+        performedBy: updatedBy,
+        timestamp: nowIso,
+        details: `Status updated from '${existing.status}' to '${payload.status}'`,
+      });
     }
 
     const updated = await this.repo.updateTicket(id, payload);
     return updated;
   }
 
-  async updateTicketStatus(id: string, status: TicketStatus, resolutionDetails?: string) {
-    const payload: Partial<ISupportTicket> = { status };
-    if (resolutionDetails) payload.resolutionDetails = resolutionDetails;
-    if (status === 'Resolved') payload.resolvedAt = new Date().toISOString();
-    if (status === 'Closed') payload.closedAt = new Date().toISOString();
-
-    const updated = await this.repo.updateTicket(id, payload);
-    if (!updated) {
+  async updateTicketStatus(
+    id: string,
+    status: TicketStatus,
+    resolutionDetails?: string,
+    notes?: string,
+    changedBy: string = 'Support Staff'
+  ) {
+    const existing = await this.repo.findTicketById(id);
+    if (!existing) {
       throw new AppError(`Ticket with ID ${id} not found`, 404);
     }
+
+    const nowIso = new Date().toISOString();
+    const payload: Partial<ISupportTicket> = { status };
+
+    if (status === 'Resolved') {
+      payload.resolvedAt = nowIso;
+      payload.resolutionDetails = resolutionDetails || notes || existing.resolutionDetails || 'Issue successfully resolved';
+    } else if (status === 'Closed') {
+      payload.closedAt = nowIso;
+    } else if (status === 'Reopened') {
+      payload.reopenedAt = nowIso;
+      payload.resolvedAt = undefined;
+      payload.closedAt = undefined;
+    }
+
+    await this.repo.addHistoryToTicket(id, {
+      id: String(Date.now()),
+      action: status === 'Reopened' ? 'REOPENED' : status === 'Resolved' ? 'RESOLVED' : 'STATUS_CHANGED',
+      performedBy: changedBy,
+      timestamp: nowIso,
+      details: notes || resolutionDetails || `Status updated to ${status}`,
+    });
+
+    const updated = await this.repo.updateTicket(id, payload);
     return updated;
+  }
+
+  async assignAgent(
+    id: string,
+    agentName: string,
+    agentEmail?: string,
+    assignedBy: string = 'Admin'
+  ) {
+    const existing = await this.repo.findTicketById(id);
+    if (!existing) {
+      throw new AppError(`Ticket with ID ${id} not found`, 404);
+    }
+
+    const nowIso = new Date().toISOString();
+    const payload: Partial<ISupportTicket> = {
+      assignedAgent: agentName,
+      assignedAgentEmail: agentEmail || '',
+    };
+
+    if (existing.status === 'Open') {
+      payload.status = 'In Progress';
+    }
+
+    await this.repo.addHistoryToTicket(id, {
+      id: String(Date.now()),
+      action: 'ASSIGNED',
+      performedBy: assignedBy,
+      timestamp: nowIso,
+      details: `Assigned ticket to agent '${agentName}'`,
+    });
+
+    return this.repo.updateTicket(id, payload);
   }
 
   async addComment(id: string, commentData: Omit<ITicketComment, 'id' | 'timestamp'>) {
@@ -211,13 +405,61 @@ export class SupportService {
       throw new AppError(`Ticket with ID ${id} not found`, 404);
     }
 
+    const nowIso = new Date().toISOString();
     const fullComment: ITicketComment = {
       ...commentData,
       id: String(Date.now()),
       timestamp: new Date().toLocaleString(),
     };
 
+    // If first response from staff, record firstResponseAt
+    if (commentData.isStaff && !existing.firstResponseAt) {
+      await this.repo.updateTicket(id, { firstResponseAt: nowIso });
+    }
+
+    await this.repo.addHistoryToTicket(id, {
+      id: String(Date.now() + 1),
+      action: 'COMMENT_ADDED',
+      performedBy: commentData.author,
+      timestamp: nowIso,
+      details: `Comment added by ${commentData.role || 'User'}`,
+    });
+
     return this.repo.addCommentToTicket(id, fullComment);
+  }
+
+  async addInternalNote(id: string, noteData: { author: string; authorEmail?: string; text: string }) {
+    const existing = await this.repo.findTicketById(id);
+    if (!existing) {
+      throw new AppError(`Ticket with ID ${id} not found`, 404);
+    }
+
+    const nowIso = new Date().toISOString();
+    const fullNote: ITicketInternalNote = {
+      id: String(Date.now()),
+      author: noteData.author,
+      authorEmail: noteData.authorEmail,
+      text: noteData.text,
+      timestamp: nowIso,
+    };
+
+    await this.repo.addHistoryToTicket(id, {
+      id: String(Date.now() + 1),
+      action: 'INTERNAL_NOTE_ADDED',
+      performedBy: noteData.author,
+      timestamp: nowIso,
+      details: 'Internal staff note added',
+    });
+
+    return this.repo.addInternalNoteToTicket(id, fullNote);
+  }
+
+  async getTicketHistory(id: string) {
+    const existing = await this.repo.findTicketById(id);
+    if (!existing) {
+      throw new AppError(`Ticket with ID ${id} not found`, 404);
+    }
+    return existing.history || [];
   }
 
   async deleteTicket(id: string) {
@@ -231,8 +473,6 @@ export class SupportService {
   // ================= 3. MAINTENANCE SERVICE =================
 
   async listMaintenance(filterParams: ISupportQueryFilter) {
-    await this.seedDefaultsIfEmpty();
-
     const page = filterParams.page || 1;
     const limit = filterParams.limit || 10;
     const skip = (page - 1) * limit;
@@ -275,7 +515,26 @@ export class SupportService {
   }
 
   async createMaintenance(payload: Partial<ISupportMaintenance>) {
-    return this.repo.createMaintenanceRequest(payload);
+    const maintenance = await this.repo.createMaintenanceRequest(payload);
+
+    // Auto-create linked Support Ticket for the maintenance issue
+    try {
+      const ticketCategory = payload.category === 'Facilities' ? 'Facilities' : 'Hardware';
+      await this.createTicket({
+        subject: `[Maintenance] ${payload.title} (${payload.system})`,
+        description: `Maintenance Request for ${payload.system}: ${payload.description}`,
+        requesterName: payload.requestedBy || 'System Administrator',
+        requesterEmail: payload.requestedByEmail || 'maintenance@company.com',
+        department: payload.department || 'IT Operations',
+        category: ticketCategory as any,
+        priority: payload.priority || 'Medium',
+        linkedMaintenanceId: (maintenance as any)._id?.toString() || (maintenance as any).id,
+      });
+    } catch (_err) {
+      // If linked ticket creation encounters duplicate or validation, proceed with maintenance creation
+    }
+
+    return maintenance;
   }
 
   async updateMaintenance(id: string, payload: Partial<ISupportMaintenance>) {
@@ -296,11 +555,9 @@ export class SupportService {
 
   // ================= 4. HELP / KB SERVICE =================
 
-  async listHelpArticles(filterParams: ISupportQueryFilter) {
-    await this.seedDefaultsIfEmpty();
-
+  async listHelpArticles(filterParams: ISupportQueryFilter & { category?: string }) {
     const page = filterParams.page || 1;
-    const limit = filterParams.limit || 10;
+    const limit = filterParams.limit || 20;
     const skip = (page - 1) * limit;
 
     const filter: FilterQuery<ISupportHelpArticleDocument> = { isPublished: true };
@@ -331,12 +588,11 @@ export class SupportService {
   }
 
   async getHelpArticleById(id: string) {
-    const article = await this.repo.findHelpArticleById(id);
-    if (!article) {
+    const updated = await this.repo.incrementArticleViews(id);
+    if (!updated) {
       throw new AppError(`Help article ${id} not found`, 404);
     }
-    await this.repo.incrementArticleViews(id);
-    return article;
+    return updated;
   }
 
   async createHelpArticle(payload: Partial<ISupportHelpArticle>) {
@@ -351,8 +607,11 @@ export class SupportService {
     return updated;
   }
 
-  async voteHelpful(id: string) {
-    const updated = await this.repo.voteHelpfulArticle(id);
+  async voteHelpArticle(id: string, isHelpful: boolean = true) {
+    const updated = isHelpful
+      ? await this.repo.voteHelpfulArticle(id)
+      : await this.repo.voteUnhelpfulArticle(id);
+
     if (!updated) {
       throw new AppError(`Help article ${id} not found`, 404);
     }
@@ -365,6 +624,105 @@ export class SupportService {
       throw new AppError(`Help article ${id} not found`, 404);
     }
     return { id, message: 'Help article deleted' };
+  }
+
+  // ================= 4b. SUPPORT AGENTS SERVICE =================
+
+  async listSupportAgents(): Promise<ISupportAgent[]> {
+    const agentCount = await this.repo.countAgents();
+    if (agentCount === 0) {
+      const defaultAgents = [
+        {
+          name: 'David Vance',
+          role: 'Lead IT Operations & Cloud Security',
+          email: 'david.v@company.com',
+          phone: '+1 (555) 019-4421',
+          department: 'IT Operations',
+          status: 'Online' as const,
+          specialties: 'Access Control, VPN, Okta SSO, Cloud IAM',
+          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80',
+        },
+        {
+          name: 'Alex Morgan',
+          role: 'DevOps & Software Licensing Specialist',
+          email: 'alex.m@company.com',
+          phone: '+1 (555) 019-4422',
+          department: 'Engineering DevOps',
+          status: 'Online' as const,
+          specialties: 'Docker, JetBrains, Figma, GitHub Enterprise',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80',
+        },
+        {
+          name: 'Carlos Mendez',
+          role: 'Workstation Hardware & Desktop Support',
+          email: 'carlos.m@company.com',
+          phone: '+1 (555) 019-4423',
+          department: 'IT Helpdesk',
+          status: 'Busy' as const,
+          specialties: 'Monitors, Laptops, Peripherals, AV Conference',
+          avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=80',
+        },
+        {
+          name: 'Emma Watson',
+          role: 'HR Support & Benefits Operations',
+          email: 'emma.w@company.com',
+          phone: '+1 (555) 019-4424',
+          department: 'HR Operations',
+          status: 'Online' as const,
+          specialties: 'Leave Requests, Letter Requests, Policy Guidance',
+          avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=256&q=80',
+        },
+      ];
+
+      for (const a of defaultAgents) {
+        await this.repo.createAgent(a);
+      }
+    }
+
+    const agents = await this.repo.findAgents();
+
+    // Dynamically calculate assigned and resolved ticket counts for each agent from MongoDB
+    const agentsWithWorkload: ISupportAgent[] = await Promise.all(
+      agents.map(async (agent: any) => {
+        const [assignedTicketCount, resolvedTicketCount] = await Promise.all([
+          this.repo.countTickets({
+            assignedAgent: { $regex: agent.name, $options: 'i' },
+            status: { $in: ['Open', 'In Progress', 'Pending', 'Reopened'] },
+          }),
+          this.repo.countTickets({
+            assignedAgent: { $regex: agent.name, $options: 'i' },
+            status: { $in: ['Resolved', 'Closed'] },
+          }),
+        ]);
+
+        return {
+          id: agent._id?.toString() || agent.id,
+          name: agent.name,
+          role: agent.role,
+          department: agent.department,
+          email: agent.email,
+          phone: agent.phone || '',
+          status: agent.status,
+          specialties: agent.specialties || '',
+          avatar: agent.avatar || '',
+          assignedTicketCount,
+          resolvedTicketCount,
+        };
+      })
+    );
+
+    return agentsWithWorkload;
+  }
+
+  async createSupportAgent(payload: Partial<ISupportAgent>) {
+    if (!payload.name || !payload.email) {
+      throw new AppError('Agent name and email are required', 400);
+    }
+    const existing = await this.repo.findAgentByEmail(payload.email);
+    if (existing) {
+      throw new AppError(`Support agent with email ${payload.email} already exists`, 409);
+    }
+    return this.repo.createAgent(payload);
   }
 
   // ================= 5. CONTACT INQUIRIES SERVICE =================
@@ -434,9 +792,9 @@ export class SupportService {
     return { id, message: 'Contact request deleted' };
   }
 
-  // ================= 6. SEED STARTER DATA =================
+  // ================= 6. EXPLICIT SEED HELPER =================
 
-  private async seedDefaultsIfEmpty() {
+  async seedInitialData() {
     const ticketCount = await this.repo.countTickets();
     if (ticketCount === 0) {
       const defaultTickets = [
@@ -449,7 +807,7 @@ export class SupportService {
           category: 'Access / Permissions' as const,
           priority: 'High' as const,
           status: 'Open' as const,
-          assignedAgent: 'David Vance (IT Ops)',
+          assignedAgent: 'David Vance',
           description: 'Received error 403 when trying to access user provision delegation in the admin portal.',
           comments: [
             { id: '1', author: 'Sarah Joseph', role: 'Requester', text: 'Attached screenshot of the error prompt.', timestamp: '2026-07-20 10:32 AM' },
@@ -465,7 +823,7 @@ export class SupportService {
           category: 'Software' as const,
           priority: 'Medium' as const,
           status: 'In Progress' as const,
-          assignedAgent: 'Alex Morgan (DevOps)',
+          assignedAgent: 'Alex Morgan',
           description: 'Development cluster license expires in 5 days. Need procurement approval & key update.',
           comments: [
             { id: '1', author: 'Michael Torres', role: 'Requester', text: 'Invoice purchase PO-8924 approved by Engineering VP.', timestamp: '2026-07-21 09:20 AM' },
@@ -481,7 +839,7 @@ export class SupportService {
           category: 'Hardware' as const,
           priority: 'Low' as const,
           status: 'Pending' as const,
-          assignedAgent: 'Carlos Mendez (IT Helpdesk)',
+          assignedAgent: 'Carlos Mendez',
           description: 'Thunderbolt dock cable connection feels loose; monitor goes blank during video conferences.',
           comments: [
             { id: '1', author: 'Carlos Mendez', role: 'Support Agent', text: 'Replacement USB-C/Thunderbolt 4 cable dispatched to your desk.', timestamp: '2026-07-22 02:30 PM', isStaff: true },
@@ -496,7 +854,7 @@ export class SupportService {
           category: 'Facilities' as const,
           priority: 'Urgent' as const,
           status: 'Open' as const,
-          assignedAgent: 'Facilities Tech Team',
+          assignedAgent: 'Carlos Mendez',
           description: 'Executive board meeting scheduled for 2:00 PM today. Microphones produce feedback echo.',
           comments: [
             { id: '1', author: 'Aisha Patel', role: 'Requester', text: 'Urgently needs AV technician on site in Room 4B.', timestamp: '2026-07-23 08:50 AM' },
@@ -511,7 +869,7 @@ export class SupportService {
           category: 'IT Support' as const,
           priority: 'High' as const,
           status: 'Resolved' as const,
-          assignedAgent: 'David Vance (IT Ops)',
+          assignedAgent: 'David Vance',
           description: 'Cannot connect to OpenVPN gateway from remote workstation due to TLS certificate expiration.',
           resolvedAt: new Date().toISOString(),
           comments: [
@@ -535,6 +893,7 @@ export class SupportService {
           answer: 'Navigate to your Employee Profile > Security Settings, or submit an Access/Permissions ticket with your employee verification token.',
           tags: ['mfa', 'security', 'okta', 'auth'],
           helpfulVotes: 48,
+          unhelpfulVotes: 2,
         },
         {
           title: 'Remote Hardware Refresh Policy',
@@ -543,22 +902,25 @@ export class SupportService {
           answer: 'Standard laptop hardware refresh is supported every 24 months. Ergonomic peripherals (monitors, keyboards, chairs) are eligible under the annual wellness allowance.',
           tags: ['hardware', 'laptop', 'ergonomics'],
           helpfulVotes: 35,
+          unhelpfulVotes: 1,
         },
         {
           title: 'Specialized Software Provisioning',
-          category: 'Software Licenses',
+          category: 'Software',
           question: 'How to request specialized engineering or design software licenses?',
           answer: 'Submit a Software Ticket with manager PO sign-off. Approved requests are provisioned through Okta Single Sign-On within 2-4 business hours.',
           tags: ['software', 'licenses', 'jetbrains', 'figma'],
           helpfulVotes: 29,
+          unhelpfulVotes: 0,
         },
         {
           title: 'Support SLA Guidelines',
-          category: 'System Downtime & SLA',
+          category: 'General Support',
           question: 'What are the response time SLAs for High and Urgent tickets?',
           answer: 'Urgent priority tickets are triaged within 15 minutes 24/7. High priority tickets have a maximum initial response window of 1 hour during business hours.',
           tags: ['sla', 'priority', 'support-policy'],
           helpfulVotes: 42,
+          unhelpfulVotes: 3,
         },
       ];
 
@@ -622,6 +984,10 @@ export class SupportService {
         await this.repo.createMaintenanceRequest(m);
       }
     }
+
+    await this.listSupportAgents();
+
+    return { message: 'Support default data seeded successfully' };
   }
 
   // ================= 6. MISCELLANEOUS REQUESTS =================
@@ -777,9 +1143,24 @@ export class SupportService {
     return updated;
   }
 
-  async updateMiscellaneousRequestStatus(id: string, status: any, comments?: string) {
-    if (!['Pending', 'Approved', 'Rejected'].includes(status)) {
-      throw AppError.badRequest(`Invalid status '${status}'. Must be Pending, Approved, or Rejected.`);
+  async updateMiscellaneousRequestStatus(
+    id: string,
+    status: any,
+    options?: {
+      comments?: string;
+      remarks?: string;
+      rejectionReason?: string;
+      approvalRemarks?: string;
+      reviewerName?: string;
+      reviewerId?: string;
+      processedBy?: string;
+    } | string
+  ) {
+    const validStatuses = ['Pending', 'In Review', 'Approved', 'Rejected', 'Processed'];
+    if (!validStatuses.includes(status)) {
+      throw AppError.badRequest(
+        `Invalid status '${status}'. Must be one of: ${validStatuses.join(', ')}.`
+      );
     }
 
     const existing = await this.repo.findMiscellaneousRequestById(id);
@@ -787,14 +1168,110 @@ export class SupportService {
       throw AppError.notFound(`Miscellaneous request '${id}' not found`);
     }
 
+    const opts = typeof options === 'string' ? { comments: options } : options || {};
+    const comments = opts.comments || opts.remarks;
+
+    if (status === 'Rejected' && !opts.rejectionReason && !comments) {
+      throw AppError.badRequest('Rejection reason is required when rejecting a request');
+    }
+
     const updatePayload: any = { status };
     if (comments !== undefined) updatePayload.comments = comments;
+    if (opts.reviewerName) updatePayload.reviewerName = opts.reviewerName;
+    if (opts.reviewerId) updatePayload.reviewerId = opts.reviewerId;
 
-    const updated = await this.repo.updateMiscellaneousRequest(id, updatePayload);
-    if (!updated) {
+    if (status === 'Approved') {
+      updatePayload.approvalRemarks = opts.approvalRemarks || comments || 'Request approved.';
+    } else if (status === 'Rejected') {
+      updatePayload.rejectionReason = opts.rejectionReason || comments || 'Request rejected.';
+    } else if (status === 'Processed') {
+      updatePayload.processedAt = new Date().toISOString();
+      updatePayload.processedBy = opts.processedBy || opts.reviewerName || 'Administrator';
+    }
+
+    const actionMap: Record<string, 'SUBMITTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'PROCESSED' | 'UPDATED'> = {
+      Pending: 'SUBMITTED',
+      'In Review': 'IN_REVIEW',
+      Approved: 'APPROVED',
+      Rejected: 'REJECTED',
+      Processed: 'PROCESSED',
+    };
+
+    const auditEntry = {
+      action: actionMap[status] || 'UPDATED',
+      previousStatus: existing.status,
+      newStatus: status,
+      changedBy: opts.reviewerName || opts.processedBy || 'Administrator',
+      changedByRole: status === 'Processed' ? 'Processor' : 'Reviewer',
+      timestamp: new Date().toISOString(),
+      remarks:
+        opts.rejectionReason ||
+        opts.approvalRemarks ||
+        comments ||
+        `Status transitioned to ${status}`,
+    };
+
+    updatePayload.$push = { auditHistory: auditEntry };
+
+    const isObjectId = id.match(/^[0-9a-fA-F]{24}$/);
+    const query = isObjectId ? { _id: id } : { requestId: id };
+    const updated = await (this.repo as any).updateMiscellaneousRequest(id, updatePayload);
+    await this.repo.appendMiscellaneousAuditHistory(id, auditEntry);
+
+    const refreshed = await this.repo.findMiscellaneousRequestById(id);
+    return refreshed || updated;
+  }
+
+  async startReview(id: string, reviewerName: string = 'HR Admin', reviewerId?: string, remarks?: string) {
+    return this.updateMiscellaneousRequestStatus(id, 'In Review', {
+      reviewerName,
+      reviewerId,
+      remarks: remarks || `Review initiated by ${reviewerName}`,
+    });
+  }
+
+  async approveMiscellaneousRequest(
+    id: string,
+    reviewerName: string = 'HR Admin',
+    reviewerId?: string,
+    approvalRemarks?: string
+  ) {
+    return this.updateMiscellaneousRequestStatus(id, 'Approved', {
+      reviewerName,
+      reviewerId,
+      approvalRemarks: approvalRemarks || 'Approved after review.',
+    });
+  }
+
+  async rejectMiscellaneousRequest(
+    id: string,
+    rejectionReason: string,
+    reviewerName: string = 'HR Admin',
+    reviewerId?: string
+  ) {
+    if (!rejectionReason || !rejectionReason.trim()) {
+      throw AppError.badRequest('Rejection reason is required when rejecting a request');
+    }
+    return this.updateMiscellaneousRequestStatus(id, 'Rejected', {
+      reviewerName,
+      reviewerId,
+      rejectionReason: rejectionReason.trim(),
+    });
+  }
+
+  async processMiscellaneousRequest(id: string, processedBy: string = 'Operations Team', remarks?: string) {
+    return this.updateMiscellaneousRequestStatus(id, 'Processed', {
+      processedBy,
+      remarks: remarks || `Request processed and fulfilled by ${processedBy}`,
+    });
+  }
+
+  async getMiscellaneousAuditHistory(id: string) {
+    const existing = await this.repo.findMiscellaneousRequestById(id);
+    if (!existing) {
       throw AppError.notFound(`Miscellaneous request '${id}' not found`);
     }
-    return updated;
+    return existing.auditHistory || [];
   }
 
   async deleteMiscellaneousRequest(id: string) {

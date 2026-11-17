@@ -18,6 +18,18 @@ export class AppError extends Error {
     return new AppError(message, 404);
   }
 
+  static unauthorized(message: string = 'Authentication required'): AppError {
+    return new AppError(message, 401);
+  }
+
+  static forbidden(message: string = 'Access denied'): AppError {
+    return new AppError(message, 403);
+  }
+
+  static conflict(message: string = 'Resource conflict'): AppError {
+    return new AppError(message, 409);
+  }
+
   static internal(message: string = 'Internal server error'): AppError {
     return new AppError(message, 500, false);
   }

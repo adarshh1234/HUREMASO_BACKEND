@@ -3,6 +3,7 @@ import {
   MaintenanceTicketModel,
   HuremasoMaintenanceLogModel,
   HuremasoSystemHealthModel,
+  SystemDiagnosticModel,
 } from './maintenance.model';
 import {
   IMaintenanceTicket,
@@ -10,11 +11,19 @@ import {
   IHuremasoMaintenanceLog,
   IHuremasoMaintenanceLogDocument,
   IHuremasoSystemHealthDocument,
+  ISystemDiagnostic,
+  ISystemDiagnosticDocument,
   ITicketComment,
   ITicketHistoryEntry,
+  IMaintenanceExecutionEntry,
 } from './maintenance.types';
 
 export class MaintenanceRepository {
+  public ticketModel = MaintenanceTicketModel;
+  public logModel = HuremasoMaintenanceLogModel;
+  public healthModel = HuremasoSystemHealthModel;
+  public diagnosticModel = SystemDiagnosticModel;
+
   // ================= 1. ACTIVE SUPPORT TICKETS =================
 
   async findTickets(
@@ -25,8 +34,9 @@ export class MaintenanceRepository {
     sortOrder: 1 | -1 = -1
   ) {
     const [total, records] = await Promise.all([
-      MaintenanceTicketModel.countDocuments(filter),
-      MaintenanceTicketModel.find(filter)
+      this.ticketModel.countDocuments(filter),
+      this.ticketModel
+        .find(filter)
         .sort({ [sortField]: sortOrder })
         .skip(skip)
         .limit(limit)
@@ -36,95 +46,200 @@ export class MaintenanceRepository {
   }
 
   async findTicketById(id: string) {
-    return MaintenanceTicketModel.findById(id);
+    const decoded = decodeURIComponent(id);
+    const isMongoId = decoded.match(/^[0-9a-fA-F]{24}$/);
+    const withHash = decoded.startsWith('#') ? decoded : `#${decoded}`;
+    const isTicketNum = decoded.toUpperCase().includes('MTK');
+    if (!isMongoId && !isTicketNum) {
+      return null;
+    }
+    const query = isMongoId ? { _id: decoded } : { $or: [{ ticketNumber: decoded }, { ticketNumber: withHash }] };
+    return this.ticketModel.findOne(query);
   }
 
   async findTicketByNumber(ticketNumber: string) {
-    return MaintenanceTicketModel.findOne({ ticketNumber });
+    const decoded = decodeURIComponent(ticketNumber);
+    const withHash = decoded.startsWith('#') ? decoded : `#${decoded}`;
+    return this.ticketModel.findOne({ $or: [{ ticketNumber: decoded }, { ticketNumber: withHash }] });
+  }
+
+  async findOpenTicketByTitleAndRequester(title: string, requesterName: string) {
+    return this.ticketModel.findOne({
+      title: { $regex: `^${title.trim()}$`, $options: 'i' },
+      requesterName: { $regex: `^${requesterName.trim()}$`, $options: 'i' },
+      status: { $in: ['Open', 'In Progress', 'Pending', 'On Hold'] },
+    });
   }
 
   async createTicket(payload: Partial<IMaintenanceTicket>) {
-    return MaintenanceTicketModel.create(payload);
+    return this.ticketModel.create(payload);
   }
 
   async updateTicket(id: string, payload: Partial<IMaintenanceTicket>) {
-    return MaintenanceTicketModel.findByIdAndUpdate(
-      id,
+    const decoded = decodeURIComponent(id);
+    const isMongoId = decoded.match(/^[0-9a-fA-F]{24}$/);
+    const withHash = decoded.startsWith('#') ? decoded : `#${decoded}`;
+    const query = isMongoId ? { _id: decoded } : { $or: [{ ticketNumber: decoded }, { ticketNumber: withHash }] };
+
+    return this.ticketModel.findOneAndUpdate(
+      query,
       { $set: payload },
       { new: true, runValidators: true }
     );
   }
 
   async addCommentToTicket(id: string, comment: ITicketComment) {
-    return MaintenanceTicketModel.findByIdAndUpdate(
-      id,
+    const decoded = decodeURIComponent(id);
+    const isMongoId = decoded.match(/^[0-9a-fA-F]{24}$/);
+    const withHash = decoded.startsWith('#') ? decoded : `#${decoded}`;
+    const query = isMongoId ? { _id: decoded } : { $or: [{ ticketNumber: decoded }, { ticketNumber: withHash }] };
+
+    return this.ticketModel.findOneAndUpdate(
+      query,
       { $push: { comments: comment } },
       { new: true }
     );
   }
 
   async addHistoryEntryToTicket(id: string, entry: ITicketHistoryEntry) {
-    return MaintenanceTicketModel.findByIdAndUpdate(
-      id,
+    const decoded = decodeURIComponent(id);
+    const isMongoId = decoded.match(/^[0-9a-fA-F]{24}$/);
+    const withHash = decoded.startsWith('#') ? decoded : `#${decoded}`;
+    const query = isMongoId ? { _id: decoded } : { $or: [{ ticketNumber: decoded }, { ticketNumber: withHash }] };
+
+    return this.ticketModel.findOneAndUpdate(
+      query,
       { $push: { history: entry } },
       { new: true }
     );
   }
 
   async deleteTicket(id: string) {
-    return MaintenanceTicketModel.findByIdAndDelete(id);
+    const decoded = decodeURIComponent(id);
+    const isMongoId = decoded.match(/^[0-9a-fA-F]{24}$/);
+    const withHash = decoded.startsWith('#') ? decoded : `#${decoded}`;
+    const isTicketNum = decoded.toUpperCase().includes('MTK');
+    if (!isMongoId && !isTicketNum) {
+      return null;
+    }
+    const query = isMongoId ? { _id: decoded } : { $or: [{ ticketNumber: decoded }, { ticketNumber: withHash }] };
+
+    return this.ticketModel.findOneAndDelete(query);
   }
 
-  async countTickets() {
-    return MaintenanceTicketModel.countDocuments();
+  async countTickets(filter: FilterQuery<IMaintenanceTicketDocument> = {}) {
+    return this.ticketModel.countDocuments(filter);
   }
 
   // ================= 2. HUREMASO MAINTENANCE LOGS =================
 
-  async findHuremasoLogs(filter: FilterQuery<IHuremasoMaintenanceLogDocument>, skip: number, limit: number) {
+  async findHuremasoLogs(
+    filter: FilterQuery<IHuremasoMaintenanceLogDocument>,
+    skip: number,
+    limit: number,
+    sortField: string = 'createdAt',
+    sortOrder: 1 | -1 = -1
+  ) {
     const [total, records] = await Promise.all([
-      HuremasoMaintenanceLogModel.countDocuments(filter),
-      HuremasoMaintenanceLogModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      this.logModel.countDocuments(filter),
+      this.logModel
+        .find(filter)
+        .sort({ [sortField]: sortOrder })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
     ]);
     return { total, records };
   }
 
   async findHuremasoLogById(id: string) {
-    return HuremasoMaintenanceLogModel.findById(id);
+    const decoded = decodeURIComponent(id);
+    if (decoded.match(/^[0-9a-fA-F]{24}$/)) {
+      return this.logModel.findById(decoded);
+    }
+    return null;
+  }
+
+  async findConflictingMaintenance(scheduledDate: string, scheduledTime: string, excludeId?: string) {
+    const query: Record<string, any> = {
+      scheduledDate,
+      scheduledTime,
+      status: { $in: ['Scheduled', 'Pending', 'In Progress'] },
+    };
+    if (excludeId && excludeId.match(/^[0-9a-fA-F]{24}$/)) {
+      query._id = { $ne: excludeId };
+    }
+    return this.logModel.findOne(query);
   }
 
   async createHuremasoLog(payload: Partial<IHuremasoMaintenanceLog>) {
-    return HuremasoMaintenanceLogModel.create(payload);
+    return this.logModel.create(payload);
   }
 
   async updateHuremasoLog(id: string, payload: Partial<IHuremasoMaintenanceLog>) {
-    return HuremasoMaintenanceLogModel.findByIdAndUpdate(
-      id,
+    const decoded = decodeURIComponent(id);
+    if (!decoded.match(/^[0-9a-fA-F]{24}$/)) {
+      return null;
+    }
+    return this.logModel.findByIdAndUpdate(
+      decoded,
       { $set: payload },
       { new: true, runValidators: true }
     );
   }
 
+  async addExecutionEntryToLog(id: string, entry: IMaintenanceExecutionEntry) {
+    const decoded = decodeURIComponent(id);
+    if (!decoded.match(/^[0-9a-fA-F]{24}$/)) {
+      return null;
+    }
+    return this.logModel.findByIdAndUpdate(
+      decoded,
+      { $push: { executionHistory: entry } },
+      { new: true }
+    );
+  }
+
   async deleteHuremasoLog(id: string) {
-    return HuremasoMaintenanceLogModel.findByIdAndDelete(id);
+    const decoded = decodeURIComponent(id);
+    if (!decoded.match(/^[0-9a-fA-F]{24}$/)) {
+      return null;
+    }
+    return this.logModel.findByIdAndDelete(decoded);
   }
 
-  async countHuremasoLogs() {
-    return HuremasoMaintenanceLogModel.countDocuments();
+  async countHuremasoLogs(filter: FilterQuery<IHuremasoMaintenanceLogDocument> = {}) {
+    return this.logModel.countDocuments(filter);
   }
 
-  // ================= 3. HUREMASO SYSTEM HEALTH =================
+  // ================= 3. HUREMASO SYSTEM HEALTH & DIAGNOSTICS =================
 
   async getLatestSystemHealth() {
-    return HuremasoSystemHealthModel.findOne().lean();
+    return this.healthModel.findOne().lean();
   }
 
   async upsertSystemHealth(payload: Partial<IHuremasoSystemHealthDocument>) {
-    return HuremasoSystemHealthModel.findOneAndUpdate(
+    return this.healthModel.findOneAndUpdate(
       { systemName: payload.systemName || 'Huremaso Cloud Infrastructure' },
       { $set: payload },
       { upsert: true, new: true }
     );
+  }
+
+  async createDiagnostic(payload: Partial<ISystemDiagnostic>) {
+    return this.diagnosticModel.create(payload);
+  }
+
+  async findDiagnostics(limit: number = 10) {
+    return this.diagnosticModel.find().sort({ createdAt: -1 }).limit(limit).lean();
+  }
+
+  async findDiagnosticById(id: string) {
+    const decoded = decodeURIComponent(id);
+    if (decoded.match(/^[0-9a-fA-F]{24}$/)) {
+      return this.diagnosticModel.findById(decoded);
+    }
+    return this.diagnosticModel.findOne({ diagnosticId: decoded });
   }
 }
 

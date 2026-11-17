@@ -34,6 +34,8 @@ import {
 } from '../wellness/wellness.model';
 import { CompanyEventModel } from '../events/event.model';
 import { NotificationModel } from '../notification/notification.model';
+import { TaskModel } from '../tasks/tasks.model';
+import { EmployeeRecognitionModel } from './recognition.model';
 import { IReportFilterParams } from './analytics.types';
 
 export class AnalyticsRepository {
@@ -561,6 +563,125 @@ export class AnalyticsRepository {
       PerformanceReviewModel.find().sort({ score: -1 }).limit(10).lean(),
     ]);
     return { appraisals, reviews };
+  }
+
+  // ================= 14. TASKS & PRODUCTIVITY REPORT =================
+  async getTasksReport(params: IReportFilterParams) {
+    const page = params.page || 1;
+    const limit = params.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const filter: FilterQuery<any> = {};
+    if (params.status && params.status !== 'All') {
+      filter.column = params.status;
+    }
+    if (params.category && params.category !== 'All') {
+      filter.priority = params.category;
+    }
+    if (params.search) {
+      filter.$or = [
+        { title: { $regex: params.search, $options: 'i' } },
+        { description: { $regex: params.search, $options: 'i' } },
+        { assigneeName: { $regex: params.search, $options: 'i' } },
+        { type: { $regex: params.search, $options: 'i' } },
+      ];
+    }
+
+    const [
+      total,
+      records,
+      priorityAgg,
+      statusAgg,
+      completedCount,
+      inProgressCount,
+      scheduledCount,
+      newCount,
+      overdueCount,
+    ] = await Promise.all([
+      TaskModel.countDocuments(filter),
+      TaskModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      TaskModel.aggregate([{ $group: { _id: '$priority', count: { $sum: 1 } } }]),
+      TaskModel.aggregate([{ $group: { _id: '$column', count: { $sum: 1 } } }]),
+      TaskModel.countDocuments({ column: 'completed' }),
+      TaskModel.countDocuments({ column: 'in-progress' }),
+      TaskModel.countDocuments({ column: 'scheduled' }),
+      TaskModel.countDocuments({ column: 'new-task' }),
+      TaskModel.countDocuments({
+        column: { $ne: 'completed' },
+        dueDate: { $lt: new Date().toISOString().split('T')[0] },
+      }),
+    ]);
+
+    return {
+      total,
+      records,
+      priorityAgg,
+      statusAgg,
+      completedCount,
+      inProgressCount,
+      scheduledCount,
+      newCount,
+      overdueCount,
+    };
+  }
+
+  // ================= 15. RECOGNITION DATA & SCORING =================
+  async getRecognitionCandidates(department?: string) {
+    const empFilter: any = { isTerminated: { $ne: true } };
+    if (department && department !== 'All' && department !== 'All Departments') {
+      empFilter.department = department;
+    }
+
+    const [employees, appraisals, taskStats, attendanceStats] = await Promise.all([
+      EmployeeModel.find(empFilter).lean(),
+      PerformanceAppraisalModel.find().lean(),
+      TaskModel.aggregate([
+        {
+          $group: {
+            _id: '$assigneeName',
+            totalTasks: { $sum: 1 },
+            completedTasks: {
+              $sum: { $cond: [{ $eq: ['$column', 'completed'] }, 1, 0] },
+            },
+          },
+        },
+      ]),
+      AttendanceModel.aggregate([
+        {
+          $group: {
+            _id: '$employeeId',
+            totalDays: { $sum: 1 },
+            presentDays: {
+              $sum: {
+                $cond: [{ $in: ['$status', ['Present', 'present']] }, 1, 0],
+              },
+            },
+          },
+        },
+      ]),
+    ]);
+
+    return { employees, appraisals, taskStats, attendanceStats };
+  }
+
+  async getApprovedRecognitions(periodType?: string) {
+    const filter: any = { status: 'Approved' };
+    if (periodType && periodType !== 'all') {
+      filter.periodType = periodType;
+    }
+    return await EmployeeRecognitionModel.find(filter).sort({ awardedDate: -1, createdAt: -1 }).lean();
+  }
+
+  async getRecognitionByPeriod(periodType: string, periodLabel: string) {
+    return await EmployeeRecognitionModel.findOne({ periodType, periodLabel }).lean();
+  }
+
+  async saveRecognition(data: any) {
+    return await EmployeeRecognitionModel.findOneAndUpdate(
+      { periodType: data.periodType, periodLabel: data.periodLabel },
+      { $set: data },
+      { upsert: true, new: true, runValidators: true }
+    );
   }
 }
 

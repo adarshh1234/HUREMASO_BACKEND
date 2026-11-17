@@ -1,14 +1,25 @@
-import { NotificationChannel, INotification } from '../notification.types';
+import { NotificationChannel, INotification, IRecipientDelivery } from '../notification.types';
+import { EmailNotificationProvider, IProviderSendResult } from './email.provider';
+import { SmsNotificationProvider } from './sms.provider';
+import { WhatsAppNotificationProvider } from './whatsapp.provider';
+import { EmployeeAppNotificationProvider } from './employeeApp.provider';
+import { HuremasoBroadcastNotificationProvider } from './huremaso.provider';
 
 export interface INotificationProvider {
   channel: NotificationChannel;
-  send(notification: INotification): Promise<{ success: boolean; providerResponse?: any }>;
+  send(
+    notification: INotification,
+    deliveries?: IRecipientDelivery[]
+  ): Promise<{ success: boolean; results?: any[]; providerResponse?: any }>;
 }
 
 export class MockNotificationProvider implements INotificationProvider {
   constructor(public channel: NotificationChannel) {}
 
-  async send(notification: INotification): Promise<{ success: boolean; providerResponse?: any }> {
+  async send(
+    notification: INotification,
+    deliveries?: IRecipientDelivery[]
+  ): Promise<{ success: boolean; results?: any[]; providerResponse?: any }> {
     console.log(`[Provider Stub - ${this.channel}] Dispatching message ID: ${notification._id || (notification as any).id || 'new'}`);
     return {
       success: true,
@@ -25,10 +36,11 @@ export class ProviderRegistry {
   private providers: Map<NotificationChannel, INotificationProvider> = new Map();
 
   constructor() {
-    // Register stub providers for V1
-    Object.values(NotificationChannel).forEach((channel) => {
-      this.registerProvider(new MockNotificationProvider(channel as NotificationChannel));
-    });
+    this.registerProvider(new EmailNotificationProvider());
+    this.registerProvider(new SmsNotificationProvider());
+    this.registerProvider(new WhatsAppNotificationProvider());
+    this.registerProvider(new EmployeeAppNotificationProvider());
+    this.registerProvider(new HuremasoBroadcastNotificationProvider());
   }
 
   registerProvider(provider: INotificationProvider): void {

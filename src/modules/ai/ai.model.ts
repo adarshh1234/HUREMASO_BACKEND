@@ -5,6 +5,8 @@ import {
   IDevelopmentRecommendationDocument,
   IAIConversationDocument,
   IComplianceRecordDocument,
+  IKnowledgeDocumentDocument,
+  IKnowledgeChunkDocument,
 } from './ai.types';
 
 // ================= 1. FLIGHT RISK SCHEMA =================
@@ -237,4 +239,80 @@ const complianceRecordSchema = new Schema<IComplianceRecordDocument>(
 export const ComplianceRecordModel = mongoose.model<IComplianceRecordDocument>(
   'AIComplianceRecord',
   complianceRecordSchema
+);
+
+// ================= 6. KNOWLEDGE DOCUMENT & CHUNK SCHEMAS (RAG) =================
+
+const knowledgeDocumentSchema = new Schema<IKnowledgeDocumentDocument>(
+  {
+    documentId: { type: String, required: true, unique: true, index: true },
+    title: { type: String, required: true, trim: true, index: true },
+    category: {
+      type: String,
+      enum: [
+        'Company Policy',
+        'Leave & Attendance',
+        'Compensation & Benefits',
+        'Statutory & Compliance',
+        'Performance & Development',
+        'Onboarding & Culture',
+      ],
+      required: true,
+      index: true,
+    },
+    version: { type: String, default: '1.0' },
+    jurisdiction: { type: String, default: 'Global / Multi-Entity' },
+    summary: { type: String, required: true },
+    content: { type: String, required: true },
+    effectiveDate: { type: String, default: '2026-01-01' },
+    lastReviewDate: { type: String, default: () => new Date().toISOString().split('T')[0] },
+    tags: { type: [String], default: [] },
+    chunkCount: { type: Number, default: 0 },
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        return ret;
+      },
+    },
+  }
+);
+
+export const KnowledgeDocumentModel = mongoose.model<IKnowledgeDocumentDocument>(
+  'AIKnowledgeDocument',
+  knowledgeDocumentSchema
+);
+
+const knowledgeChunkSchema = new Schema<IKnowledgeChunkDocument>(
+  {
+    chunkId: { type: String, required: true, unique: true, index: true },
+    documentId: { type: String, required: true, index: true },
+    documentTitle: { type: String, required: true, trim: true },
+    category: { type: String, required: true, index: true },
+    sectionHeader: { type: String, required: true, trim: true },
+    content: { type: String, required: true },
+    keywords: { type: [String], default: [], index: true },
+    tokensCount: { type: Number, default: 0 },
+    metadata: { type: Schema.Types.Mixed, default: {} },
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        return ret;
+      },
+    },
+  }
+);
+
+knowledgeChunkSchema.index({ documentId: 1, sectionHeader: 1 });
+
+export const KnowledgeChunkModel = mongoose.model<IKnowledgeChunkDocument>(
+  'AIKnowledgeChunk',
+  knowledgeChunkSchema
 );

@@ -2,7 +2,20 @@ import { AssociationModel } from './association.model';
 import { IAssociation, IAssociationDocument, IAssociationFilterParams, IAssociationOverviewStats } from './association.types';
 
 export class AssociationRepository {
-  private model = AssociationModel;
+  public model = AssociationModel;
+
+  async findOne(query: Record<string, any>): Promise<IAssociationDocument | null> {
+    return this.model.findOne(query).exec();
+  }
+
+  async findPendingDuplicate(employeeName: string, targetDepartment: string): Promise<IAssociationDocument | null> {
+    return this.model.findOne({
+      employeeName: { $regex: new RegExp(`^${employeeName.trim()}$`, 'i') },
+      targetDepartment: { $regex: new RegExp(`^${targetDepartment.trim()}$`, 'i') },
+      status: 'Pending',
+      isExisting: false,
+    }).exec();
+  }
 
   async seedInitialDataIfEmpty(): Promise<void> {
     const count = await this.model.countDocuments();
@@ -305,7 +318,6 @@ export class AssociationRepository {
   async findAll(
     params: IAssociationFilterParams
   ): Promise<{ items: IAssociationDocument[]; total: number }> {
-    await this.seedInitialDataIfEmpty();
     const filter = this.buildMongoFilter(params);
     const page = params.page || 1;
     const limit = params.limit || 10;
@@ -324,11 +336,12 @@ export class AssociationRepository {
   }
 
   async findById(id: string): Promise<IAssociationDocument | null> {
-    await this.seedInitialDataIfEmpty();
-    if (id.match(/^[0-9a-fA-F]{24}$/)) {
-      return this.model.findById(id).exec();
+    const decoded = decodeURIComponent(id);
+    if (decoded.match(/^[0-9a-fA-F]{24}$/)) {
+      return this.model.findById(decoded).exec();
     }
-    return this.model.findOne({ associationCode: id }).exec();
+    const withHash = decoded.startsWith('#') ? decoded : `#${decoded}`;
+    return this.model.findOne({ $or: [{ associationCode: decoded }, { associationCode: withHash }] }).exec();
   }
 
   async create(data: Partial<IAssociation>): Promise<IAssociationDocument> {
@@ -337,14 +350,18 @@ export class AssociationRepository {
   }
 
   async update(id: string, updateData: Partial<IAssociation>): Promise<IAssociationDocument | null> {
-    const isMongoId = id.match(/^[0-9a-fA-F]{24}$/);
-    const query = isMongoId ? { _id: id } : { associationCode: id };
+    const decoded = decodeURIComponent(id);
+    const isMongoId = decoded.match(/^[0-9a-fA-F]{24}$/);
+    const withHash = decoded.startsWith('#') ? decoded : `#${decoded}`;
+    const query = isMongoId ? { _id: decoded } : { $or: [{ associationCode: decoded }, { associationCode: withHash }] };
     return this.model.findOneAndUpdate(query, updateData, { new: true, runValidators: true }).exec();
   }
 
   async delete(id: string): Promise<IAssociationDocument | null> {
-    const isMongoId = id.match(/^[0-9a-fA-F]{24}$/);
-    const query = isMongoId ? { _id: id } : { associationCode: id };
+    const decoded = decodeURIComponent(id);
+    const isMongoId = decoded.match(/^[0-9a-fA-F]{24}$/);
+    const withHash = decoded.startsWith('#') ? decoded : `#${decoded}`;
+    const query = isMongoId ? { _id: decoded } : { $or: [{ associationCode: decoded }, { associationCode: withHash }] };
     return this.model.findOneAndDelete(query).exec();
   }
 
@@ -358,8 +375,6 @@ export class AssociationRepository {
   }
 
   async getOverviewStats(): Promise<IAssociationOverviewStats> {
-    await this.seedInitialDataIfEmpty();
-
     const [
       totalRequests,
       pendingRequests,

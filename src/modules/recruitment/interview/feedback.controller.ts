@@ -16,6 +16,9 @@ export class FeedbackController {
       const data = await feedbackService.getAllFeedback({
         candidateId: req.query.candidateId as string,
         interviewId: req.query.interviewId as string,
+        search: req.query.search as string,
+        status: req.query.status as string,
+        recommendation: req.query.recommendation as string,
       });
       res.status(200).json({ success: true, data });
     } catch (err) {

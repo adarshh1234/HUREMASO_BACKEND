@@ -82,9 +82,60 @@ const ResumeSchema = new Schema<IResumeDocument>(
       max: 100,
       default: 0,
     },
+    matchedSkills: {
+      type: [String],
+      default: [],
+    },
+    missingSkills: {
+      type: [String],
+      default: [],
+    },
+    source: {
+      type: String,
+      default: 'Direct Upload',
+      trim: true,
+      index: true,
+    },
+    isVerifiedLetsGetIn: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    verifiedDate: {
+      type: String,
+      trim: true,
+    },
+    assessmentScore: {
+      type: Number,
+      default: 0,
+    },
+    location: {
+      type: String,
+      trim: true,
+    },
+    expectedSalary: {
+      type: String,
+      trim: true,
+    },
+    noticePeriod: {
+      type: String,
+      trim: true,
+    },
+    avatar: {
+      type: String,
+      trim: true,
+    },
+    previousCompany: {
+      type: String,
+      trim: true,
+    },
+    summary: {
+      type: String,
+      trim: true,
+    },
     status: {
       type: String,
-      enum: ['Uploaded', 'Parsed', 'Shortlisted', 'Archived'],
+      enum: ['Uploaded', 'Parsed', 'Shortlisted', 'Archived', 'New', 'Screened', 'Interview', 'Offered'],
       default: 'Parsed',
     },
   },

@@ -14,6 +14,8 @@ const VacancySchema = new Schema<IVacancyDocument>(
     hiringManager: { type: String, default: 'HR Manager', trim: true },
     noOfOpenings: { type: Number, default: 1, min: 1 },
     numberOfPositions: { type: Number, default: 1, min: 1 },
+    numberOfOpenings: { type: Number, default: 1, min: 1 },
+    openings: { type: Number, default: 1, min: 1 },
     description: { type: String, default: '', trim: true },
     jobDescription: { type: String, default: '', trim: true },
     requirements: { type: Schema.Types.Mixed, default: '' },
@@ -44,8 +46,11 @@ const VacancySchema = new Schema<IVacancyDocument>(
         ret.id = ret._id ? ret._id.toString() : '';
         if (!ret.jobTitle && ret.title) ret.jobTitle = ret.title;
         if (!ret.title && ret.jobTitle) ret.title = ret.jobTitle;
-        if (!ret.numberOfPositions && ret.noOfOpenings) ret.numberOfPositions = ret.noOfOpenings;
-        if (!ret.noOfOpenings && ret.numberOfPositions) ret.noOfOpenings = ret.numberOfPositions;
+        const openingsVal = ret.numberOfOpenings || ret.openings || ret.noOfOpenings || ret.numberOfPositions || 1;
+        ret.numberOfOpenings = openingsVal;
+        ret.openings = openingsVal;
+        ret.noOfOpenings = openingsVal;
+        ret.numberOfPositions = openingsVal;
         if (!ret.jobDescription && ret.description) ret.jobDescription = ret.description;
         if (!ret.description && ret.jobDescription) ret.description = ret.jobDescription;
         if (!ret.skillsRequired && ret.skills) ret.skillsRequired = ret.skills;
@@ -57,7 +62,7 @@ const VacancySchema = new Schema<IVacancyDocument>(
   }
 );
 
-VacancySchema.pre('save', function (next) {
+VacancySchema.pre('save', function (this: any, next: any) {
   if (!this.jobTitle && this.title) this.jobTitle = this.title;
   if (!this.title && this.jobTitle) this.title = this.jobTitle;
   if (!this.numberOfPositions && this.noOfOpenings) this.numberOfPositions = this.noOfOpenings;

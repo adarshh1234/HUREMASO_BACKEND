@@ -8,13 +8,20 @@ import {
 
 const EventTaskSchema = new Schema(
   {
+    id: { type: String },
     name: { type: String, required: true },
     due: { type: String, required: true },
+    dueDate: { type: String },
     assignee: { type: String, default: 'Sarah Jo' },
     status: {
       type: String,
       enum: ['In Progress', 'Pending', 'Not Started', 'Completed'],
       default: 'In Progress',
+    },
+    priority: {
+      type: String,
+      enum: ['Low', 'Medium', 'High'],
+      default: 'Medium',
     },
     progress: { type: Number, default: 0 },
   },
@@ -27,7 +34,7 @@ const EventBudgetInfoSchema = new Schema(
     spent: { type: Number, default: 0 },
     status: {
       type: String,
-      enum: ['Approved', 'Pending Review', 'Over Budget'],
+      enum: ['Approved', 'Pending Review', 'Over Budget', 'Rejected'],
       default: 'Approved',
     },
   },
@@ -59,13 +66,13 @@ const CompanyEventSchema = new Schema<ICompanyEventDocument>(
     attendeeCount: { type: Number, default: 15 },
     status: {
       type: String,
-      enum: ['Draft', 'Planing', 'In Progress', 'Up coming', 'Completed', 'Cancelled'],
-      default: 'Up coming',
+      enum: ['Draft', 'Planing', 'Planning', 'In Progress', 'Up coming', 'Upcoming', 'Completed', 'Cancelled'],
+      default: 'Upcoming',
       index: true,
     },
-    progress: { type: String, default: '7/20 Task' },
+    progress: { type: String, default: '0/0 Task' },
     tasks: [EventTaskSchema],
-    budget: { type: EventBudgetInfoSchema, default: () => ({ allocated: 5000, spent: 2500, status: 'Approved' }) },
+    budget: { type: EventBudgetInfoSchema, default: () => ({ allocated: 5000, spent: 0, status: 'Approved' }) },
     sendReminder: { type: Boolean, default: true },
     syncCalendar: { type: Boolean, default: true },
     emailNotifications: { type: Boolean, default: true },
@@ -86,16 +93,27 @@ const SupportEventSchema = new Schema<ISupportEventDocument>(
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
     author: { type: String, default: 'Sarah Jo' },
-    timeAgo: { type: String, default: '2 hr ago' },
+    requesterEmail: { type: String, trim: true },
+    department: { type: String, default: 'General', trim: true },
+    category: { type: String, default: 'General', index: true },
+    priority: {
+      type: String,
+      enum: ['Low', 'Medium', 'High', 'Urgent'],
+      default: 'Medium',
+      index: true,
+    },
+    assignedAgent: { type: String, default: 'HR Support Specialist' },
+    timeAgo: { type: String, default: 'Just now' },
     replaysCount: { type: Number, default: 0 },
     status: {
       type: String,
-      enum: ['Open', 'Pending', 'Resolved', 'Closed'],
+      enum: ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'],
       default: 'Open',
       index: true,
     },
     replies: [
       {
+        id: { type: String },
         author: { type: String, required: true },
         text: { type: String, required: true },
         date: { type: String, default: () => new Date().toISOString() },
@@ -119,9 +137,11 @@ const EventsNewsletterSchema = new Schema<IEventsNewsletterDocument>(
     title: { type: String, required: true, trim: true },
     category: { type: String, default: 'Company Events', index: true },
     publishDate: { type: String, default: 'Today' },
+    scheduleDate: { type: String },
     author: { type: String, default: 'HR Communications Team' },
     reads: { type: Number, default: 0 },
     likes: { type: Number, default: 0 },
+    likedBy: { type: [String], default: [] },
     status: {
       type: String,
       enum: ['Published', 'Draft', 'Scheduled'],
@@ -142,6 +162,24 @@ const EventsNewsletterSchema = new Schema<IEventsNewsletterDocument>(
   }
 );
 
+const EventExpenseSchema = new Schema(
+  {
+    id: { type: String },
+    description: { type: String, required: true, trim: true },
+    category: { type: String, default: 'General' },
+    amount: { type: Number, required: true },
+    date: { type: String, default: () => new Date().toISOString().split('T')[0] },
+    vendor: { type: String, default: '' },
+    recordedBy: { type: String, default: 'HR Specialist' },
+    approvalStatus: {
+      type: String,
+      enum: ['Approved', 'Pending Review', 'Rejected'],
+      default: 'Approved',
+    },
+  },
+  { _id: false }
+);
+
 const EventsBudgetSchema = new Schema<IEventsBudgetItemDocument>(
   {
     eventName: { type: String, required: true, trim: true, index: true },
@@ -151,11 +189,12 @@ const EventsBudgetSchema = new Schema<IEventsBudgetItemDocument>(
     spent: { type: Number, default: 0 },
     status: {
       type: String,
-      enum: ['Approved', 'Pending Review', 'Over Budget'],
+      enum: ['Approved', 'Pending Review', 'Over Budget', 'Rejected'],
       default: 'Pending Review',
       index: true,
     },
     owner: { type: String, default: 'Sarah Joseph' },
+    expenses: [EventExpenseSchema],
   },
   {
     timestamps: true,

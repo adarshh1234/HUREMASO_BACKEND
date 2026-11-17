@@ -16,6 +16,8 @@ export const createAssociationRequestSchema = z.object({
   date: z.string().optional(), // Frontend alias
   effectiveDate: z.string().optional(),
   expiryDate: z.string().optional(),
+  durationMonths: z.coerce.number().min(1).max(60).optional().default(6),
+  attachments: z.array(z.string()).optional(),
   notes: z.string().optional(),
 }).refine(data => data.employeeName || data.name, {
   message: 'Employee name or name is required',
@@ -41,6 +43,8 @@ export const updateAssociationSchema = z.object({
   dateRequested: z.string().optional(),
   effectiveDate: z.string().optional(),
   expiryDate: z.string().optional(),
+  durationMonths: z.coerce.number().min(1).max(60).optional(),
+  attachments: z.array(z.string()).optional(),
   notes: z.string().optional(),
   isExisting: z.boolean().optional(),
   performedBy: z.string().optional(),
@@ -53,6 +57,13 @@ export const approveRejectAssociationSchema = z.object({
   notes: z.string().optional(),
   rejectionReason: z.string().optional(),
   effectiveDate: z.string().optional(),
+});
+
+export const renewAssociationSchema = z.object({
+  durationMonths: z.coerce.number().min(1).max(60).optional().default(6),
+  expiryDate: z.string().optional(),
+  notes: z.string().optional(),
+  performedBy: z.string().optional().default('System Admin'),
 });
 
 export const deactivateAssociationSchema = z.object({
@@ -80,4 +91,5 @@ export type CreateAssociationRequestInput = z.infer<typeof createAssociationRequ
 export type UpdateAssociationInput = z.infer<typeof updateAssociationSchema>;
 export type ApproveRejectAssociationInput = z.infer<typeof approveRejectAssociationSchema>;
 export type DeactivateAssociationInput = z.infer<typeof deactivateAssociationSchema>;
+export type RenewAssociationInput = z.infer<typeof renewAssociationSchema>;
 export type AssociationQueryFilterInput = z.infer<typeof associationQueryFilterSchema>;

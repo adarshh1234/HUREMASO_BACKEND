@@ -20,6 +20,9 @@ import {
   IWorkforceAnalyticsSummary,
   IEmployeeSentimentMetrics,
   IComplianceScanResult,
+  IKnowledgeDocumentDocument,
+  IKnowledgeChunkDocument,
+  IRAGSearchResult,
 } from './ai.types';
 import { AppError } from '../../common/errors/AppError';
 
@@ -99,6 +102,12 @@ export class AIService {
     return updated;
   }
 
+  async deleteFlightRisk(id: string): Promise<IFlightRiskDocument> {
+    const deleted = await this.repository.deleteFlightRisk(id);
+    if (!deleted) throw AppError.notFound(`Flight risk record with id '${id}' not found`);
+    return deleted;
+  }
+
   async evaluateEmployeeFlightRisk(employeeData: Record<string, any>): Promise<any> {
     const prediction = await this.provider.predictFlightRisk(employeeData);
     return prediction;
@@ -165,11 +174,23 @@ export class AIService {
 
   // ================= 3. CONVERSATIONAL HR & EX =================
 
-  async getConversation(conversationId = 'default-chat', userId = 'user-1', userName = 'Sarah Joseph'): Promise<IAIConversationDocument> {
+  async getConversation(
+    conversationId = 'default-chat',
+    userId = 'user-1',
+    userName = 'Sarah Joseph',
+    userRole = 'Admin'
+  ): Promise<IAIConversationDocument> {
+    const existing = await this.repository.getConversation(conversationId);
+    if (existing && existing.userId && existing.userId !== userId && userRole !== 'Admin') {
+      throw AppError.forbidden("Access denied: You are not authorized to view another user's conversation thread");
+    }
     return this.repository.getOrCreateConversation(conversationId, userId, userName);
   }
 
-  async sendChatMessage(input: SendChatMessageInput): Promise<{
+  async sendChatMessage(
+    input: SendChatMessageInput,
+    userRole = 'Admin'
+  ): Promise<{
     conversation: IAIConversationDocument;
     aiResponse: {
       text: string;
@@ -179,6 +200,11 @@ export class AIService {
     };
   }> {
     const conversationId = input.conversationId || 'default-chat';
+    const existing = await this.repository.getConversation(conversationId);
+    if (existing && existing.userId && existing.userId !== input.userId && userRole !== 'Admin') {
+      throw AppError.forbidden("Access denied: You are not authorized to post to another user's conversation thread");
+    }
+
     await this.repository.getOrCreateConversation(conversationId, input.userId, input.userName);
 
     const userMessageId = `msg-${Date.now()}`;
@@ -217,7 +243,16 @@ export class AIService {
     };
   }
 
-  async clearConversation(conversationId = 'default-chat'): Promise<IAIConversationDocument> {
+  async clearConversation(
+    conversationId = 'default-chat',
+    userId = 'user-1',
+    userRole = 'Admin'
+  ): Promise<IAIConversationDocument> {
+    const existing = await this.repository.getConversation(conversationId);
+    if (existing && existing.userId && existing.userId !== userId && userRole !== 'Admin') {
+      throw AppError.forbidden("Access denied: You are not authorized to clear another user's conversation thread");
+    }
+
     const cleared = await this.repository.clearConversationMessages(conversationId);
     if (!cleared) throw AppError.notFound(`Conversation '${conversationId}' not found`);
     return cleared;
@@ -227,12 +262,26 @@ export class AIService {
     return this.repository.getEmployeeSentimentMetrics();
   }
 
-  async syncKnowledgeBase(): Promise<{ status: string; syncedEntities: number; timestamp: string }> {
-    return {
-      status: 'Knowledge Base Synced',
-      syncedEntities: 18,
-      timestamp: new Date().toISOString(),
-    };
+  async syncKnowledgeBase(): Promise<{
+    status: string;
+    syncedEntities: number;
+    chunksCount: number;
+    categories: string[];
+    timestamp: string;
+  }> {
+    return this.repository.syncKnowledgeBase();
+  }
+
+  async listKnowledgeDocuments(): Promise<IKnowledgeDocumentDocument[]> {
+    return this.repository.listKnowledgeDocuments();
+  }
+
+  async listKnowledgeChunks(documentId?: string): Promise<IKnowledgeChunkDocument[]> {
+    return this.repository.listKnowledgeChunks(documentId);
+  }
+
+  async searchKnowledgeBase(query: string): Promise<IRAGSearchResult[]> {
+    return this.repository.searchKnowledgeChunks(query);
   }
 
   // ================= 4. AUTOMATED COMPLIANCE =================
@@ -292,14 +341,7 @@ export class AIService {
   }
 
   async runComplianceScan(): Promise<IComplianceScanResult> {
-    return {
-      scanTimestamp: new Date().toISOString(),
-      totalRecordsScanned: 145,
-      auditReadinessScore: 100,
-      discrepanciesFound: 0,
-      status: 'Audit Ready',
-      summary: '100% Audit Ready — 0 compliance discrepancies found across all active employee registers.',
-    };
+    return this.repository.runComplianceAuditScan();
   }
 }
 

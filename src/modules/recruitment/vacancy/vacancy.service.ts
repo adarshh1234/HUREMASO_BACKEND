@@ -11,8 +11,11 @@ export class VacancyService {
     const title = dto.title || dto.jobTitle || '';
     const description = dto.description || dto.jobDescription || '';
     const jobDescription = dto.jobDescription || dto.description || '';
-    const noOfOpenings = dto.noOfOpenings || dto.numberOfPositions || (dto as any).openPositions || 1;
-    const numberOfPositions = dto.numberOfPositions || dto.noOfOpenings || (dto as any).openPositions || 1;
+    const count = dto.noOfOpenings || dto.numberOfPositions || (dto as any).numberOfOpenings || (dto as any).openPositions || (dto as any).openings || 1;
+    const noOfOpenings = count;
+    const numberOfPositions = count;
+    const numberOfOpenings = count;
+    const openings = count;
 
     const payload: any = {
       ...dto,
@@ -22,6 +25,8 @@ export class VacancyService {
       jobDescription,
       noOfOpenings,
       numberOfPositions,
+      numberOfOpenings,
+      openings,
       hiringManager: dto.hiringManager || 'HR Manager',
     };
 
@@ -34,11 +39,31 @@ export class VacancyService {
     if (!vacancy) {
       throw new AppError('Vacancy not found', 404);
     }
-    return vacancy.toJSON() as unknown as IVacancy;
+    const json: any = vacancy.toJSON();
+    const candidates = await CandidateModel.find({
+      $or: [
+        { vacancyId: id },
+        { vacancy: json.title },
+        { vacancy: json.jobTitle },
+      ],
+    }).exec();
+    const filled = candidates.filter(c => c.status === 'Hired' || c.status === 'Offered' || c.status === 'Selected').length;
+    const openings = json.numberOfPositions || json.noOfOpenings || json.numberOfOpenings || 1;
+    json.filledPositions = filled;
+    json.remainingPositions = Math.max(0, openings - filled);
+    return json as unknown as IVacancy;
   }
 
   async updateVacancy(id: string, dto: UpdateVacancyDTO): Promise<IVacancy> {
-    const updated = await this.repo.update(id, dto);
+    const payload: any = { ...dto };
+    const count = payload.numberOfPositions || payload.noOfOpenings || (payload as any).numberOfOpenings || (payload as any).openings;
+    if (count !== undefined) {
+      payload.numberOfPositions = count;
+      payload.noOfOpenings = count;
+      payload.numberOfOpenings = count;
+      payload.openings = count;
+    }
+    const updated = await this.repo.update(id, payload);
     if (!updated) {
       throw new AppError('Vacancy not found', 404);
     }
@@ -58,8 +83,31 @@ export class VacancyService {
 
   async getAllVacancies(params: VacancyQueryParams) {
     const { items, total } = await this.repo.findAll(params);
+    const enriched = await Promise.all(
+      items.map(async (vDoc) => {
+        const v = vDoc.toJSON() as unknown as IVacancy;
+        const openings = v.noOfOpenings || v.numberOfPositions || (v as any).numberOfOpenings || (v as any).openings || 1;
+        const filled = await CandidateModel.countDocuments({
+          $or: [
+            { vacancyId: vDoc._id },
+            { vacancy: v.jobTitle },
+            { vacancy: v.title },
+          ],
+          status: { $in: ['Hired', 'Selected', 'Offered', 'Onboarding'] },
+          isArchived: false,
+        });
+        const remaining = Math.max(0, openings - filled);
+        return {
+          ...v,
+          openings,
+          numberOfOpenings: openings,
+          filledPositions: filled,
+          remainingPositions: remaining,
+        };
+      })
+    );
     return {
-      items: items.map((i) => i.toJSON() as unknown as IVacancy),
+      items: enriched,
       total,
       page: Number(params.page) || 1,
       limit: Number(params.limit) || 50,
@@ -106,9 +154,32 @@ export class VacancyService {
       }
     });
 
+    const openings = vacancy.noOfOpenings || vacancy.numberOfPositions || (vacancy as any).numberOfOpenings || (vacancy as any).openings || 1;
+    const filled = stageMap.Hired.length + stageMap.Offered.length;
+    const remaining = Math.max(0, openings - filled);
+
     return {
-      vacancy,
+      vacancy: {
+        ...vacancy,
+        openings,
+        numberOfOpenings: openings,
+        filledPositions: filled,
+        remainingPositions: remaining,
+      },
+      openings,
+      numberOfOpenings: openings,
       totalApplicants: candidates.length,
+      filledPositions: filled,
+      remainingPositions: remaining,
+      pipeline: {
+        applied: stageMap.Applied.length,
+        screened: stageMap.Screened.length,
+        shortlisted: stageMap.Shortlisted.length,
+        interview: stageMap.Interview.length,
+        offered: stageMap.Offered.length,
+        hired: stageMap.Hired.length,
+        rejected: stageMap.Rejected.length,
+      },
       stages: {
         applied: stageMap.Applied.length,
         screened: stageMap.Screened.length,

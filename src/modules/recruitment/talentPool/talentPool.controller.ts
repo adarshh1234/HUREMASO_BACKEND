@@ -14,7 +14,7 @@ export class TalentPoolController {
   async getAll(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await talentPoolService.getAllTalentPools(req.query as any);
-      res.status(200).json({ success: true, ...result });
+      res.status(200).json({ success: true, data: result.items, pools: result.items, items: result.items, total: result.total });
     } catch (err) {
       next(err);
     }

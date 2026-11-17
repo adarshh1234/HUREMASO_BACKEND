@@ -1,10 +1,11 @@
-import { FilterQuery } from 'mongoose';
+import { FilterQuery, isValidObjectId } from 'mongoose';
 import {
   SupportTicketModel,
   SupportMaintenanceModel,
   SupportHelpArticleModel,
   SupportContactRequestModel,
   MiscellaneousRequestModel,
+  SupportAgentModel,
 } from './support.model';
 import {
   ISupportTicket,
@@ -18,6 +19,10 @@ import {
   IMiscellaneousRequest,
   IMiscellaneousRequestDocument,
   ITicketComment,
+  ITicketInternalNote,
+  ITicketHistoryEntry,
+  ISupportAgent,
+  ISupportAgentDocument,
   MiscRequestSummaryCounts,
 } from './support.types';
 
@@ -33,11 +38,28 @@ export class SupportRepository {
   }
 
   async findTicketById(id: string) {
-    return SupportTicketModel.findById(id);
+    if (isValidObjectId(id)) {
+      const doc = await SupportTicketModel.findById(id);
+      if (doc) return doc;
+    }
+    return SupportTicketModel.findOne({
+      $or: [{ ticketNumber: id }, { ticketNumber: `#${id.replace(/^#/, '')}` }],
+    });
   }
 
   async findTicketByNumber(ticketNumber: string) {
-    return SupportTicketModel.findOne({ ticketNumber });
+    const cleanNum = ticketNumber.trim();
+    return SupportTicketModel.findOne({
+      $or: [{ ticketNumber: cleanNum }, { ticketNumber: `#${cleanNum.replace(/^#/, '')}` }],
+    });
+  }
+
+  async findOpenTicketByRequesterAndSubject(requesterEmail: string, subject: string) {
+    return SupportTicketModel.findOne({
+      requesterEmail: requesterEmail.trim().toLowerCase(),
+      subject: { $regex: `^${subject.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+      status: { $in: ['Open', 'In Progress', 'Pending', 'Reopened'] },
+    });
   }
 
   async createTicket(payload: Partial<ISupportTicket>) {
@@ -45,35 +67,75 @@ export class SupportRepository {
   }
 
   async updateTicket(id: string, payload: Partial<ISupportTicket>) {
-    return SupportTicketModel.findByIdAndUpdate(id, { $set: payload }, { new: true, runValidators: true });
+    const query = isValidObjectId(id)
+      ? { _id: id }
+      : { $or: [{ ticketNumber: id }, { ticketNumber: `#${id.replace(/^#/, '')}` }] };
+    return SupportTicketModel.findOneAndUpdate(query, { $set: payload }, { new: true, runValidators: true });
   }
 
   async deleteTicket(id: string) {
-    return SupportTicketModel.findByIdAndDelete(id);
+    const query = isValidObjectId(id)
+      ? { _id: id }
+      : { $or: [{ ticketNumber: id }, { ticketNumber: `#${id.replace(/^#/, '')}` }] };
+    return SupportTicketModel.findOneAndDelete(query);
   }
 
   async addCommentToTicket(id: string, comment: ITicketComment) {
-    return SupportTicketModel.findByIdAndUpdate(
-      id,
+    const query = isValidObjectId(id)
+      ? { _id: id }
+      : { $or: [{ ticketNumber: id }, { ticketNumber: `#${id.replace(/^#/, '')}` }] };
+    return SupportTicketModel.findOneAndUpdate(
+      query,
       { $push: { comments: comment } },
       { new: true }
     );
   }
 
-  async countTickets() {
-    return SupportTicketModel.countDocuments();
+  async addInternalNoteToTicket(id: string, note: ITicketInternalNote) {
+    const query = isValidObjectId(id)
+      ? { _id: id }
+      : { $or: [{ ticketNumber: id }, { ticketNumber: `#${id.replace(/^#/, '')}` }] };
+    return SupportTicketModel.findOneAndUpdate(
+      query,
+      { $push: { internalNotes: note } },
+      { new: true }
+    );
+  }
+
+  async addHistoryToTicket(id: string, entry: ITicketHistoryEntry) {
+    const query = isValidObjectId(id)
+      ? { _id: id }
+      : { $or: [{ ticketNumber: id }, { ticketNumber: `#${id.replace(/^#/, '')}` }] };
+    return SupportTicketModel.findOneAndUpdate(
+      query,
+      { $push: { history: entry } },
+      { new: true }
+    );
+  }
+
+  async countTickets(filter: FilterQuery<ISupportTicketDocument> = {}) {
+    return SupportTicketModel.countDocuments(filter);
+  }
+
+  async getAllTicketsForMetrics() {
+    return SupportTicketModel.find({}).lean();
   }
 
   async getTicketDashboardAggregates() {
-    const [statusAgg, categoryAgg, priorityAgg, totalCount, recentTickets] = await Promise.all([
+    const [statusAgg, categoryAgg, priorityAgg, totalCount, unassignedCount, recentTickets, allTickets] = await Promise.all([
       SupportTicketModel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
       SupportTicketModel.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
       SupportTicketModel.aggregate([{ $group: { _id: '$priority', count: { $sum: 1 } } }]),
       SupportTicketModel.countDocuments(),
+      SupportTicketModel.countDocuments({
+        $or: [{ assignedAgent: { $exists: false } }, { assignedAgent: '' }, { assignedAgent: 'Unassigned' }],
+        status: { $in: ['Open', 'In Progress', 'Pending', 'Reopened'] },
+      }),
       SupportTicketModel.find().sort({ updatedAt: -1 }).limit(6).lean(),
+      SupportTicketModel.find({}, 'createdAt firstResponseAt resolvedAt slaDueAt status').lean(),
     ]);
 
-    return { statusAgg, categoryAgg, priorityAgg, totalCount, recentTickets };
+    return { statusAgg, categoryAgg, priorityAgg, totalCount, unassignedCount, recentTickets, allTickets };
   }
 
   // ================= 2. MAINTENANCE DATA ACCESS =================
@@ -140,8 +202,38 @@ export class SupportRepository {
     return SupportHelpArticleModel.findByIdAndUpdate(id, { $inc: { helpfulVotes: 1 } }, { new: true });
   }
 
+  async voteUnhelpfulArticle(id: string) {
+    return SupportHelpArticleModel.findByIdAndUpdate(id, { $inc: { unhelpfulVotes: 1 } }, { new: true });
+  }
+
   async countHelpArticles() {
     return SupportHelpArticleModel.countDocuments();
+  }
+
+  // ================= 3b. AGENTS DATA ACCESS =================
+
+  async findAgents() {
+    return SupportAgentModel.find().lean();
+  }
+
+  async findAgentById(id: string) {
+    return SupportAgentModel.findById(id);
+  }
+
+  async findAgentByEmail(email: string) {
+    return SupportAgentModel.findOne({ email: email.toLowerCase().trim() });
+  }
+
+  async createAgent(payload: Partial<ISupportAgent>) {
+    return SupportAgentModel.create(payload);
+  }
+
+  async updateAgent(id: string, payload: Partial<ISupportAgent>) {
+    return SupportAgentModel.findByIdAndUpdate(id, { $set: payload }, { new: true, runValidators: true });
+  }
+
+  async countAgents() {
+    return SupportAgentModel.countDocuments();
   }
 
   // ================= 4. CONTACT INQUIRIES DATA ACCESS =================
@@ -248,13 +340,28 @@ export class SupportRepository {
 
   async getMiscellaneousSummaryCounts(): Promise<MiscRequestSummaryCounts> {
     await this.seedMiscellaneousDefaultsIfEmpty();
-    const [total, pending, approved, rejected] = await Promise.all([
+    const [total, pending, inReview, approved, rejected, processed] = await Promise.all([
       MiscellaneousRequestModel.countDocuments(),
       MiscellaneousRequestModel.countDocuments({ status: 'Pending' }),
+      MiscellaneousRequestModel.countDocuments({ status: 'In Review' }),
       MiscellaneousRequestModel.countDocuments({ status: 'Approved' }),
       MiscellaneousRequestModel.countDocuments({ status: 'Rejected' }),
+      MiscellaneousRequestModel.countDocuments({ status: 'Processed' }),
     ]);
-    return { total, pending, approved, rejected };
+    return { total, pending, inReview, approved, rejected, processed };
+  }
+
+  async appendMiscellaneousAuditHistory(
+    id: string,
+    entry: any
+  ): Promise<IMiscellaneousRequestDocument | null> {
+    const isObjectId = id.match(/^[0-9a-fA-F]{24}$/);
+    const query = isObjectId ? { _id: id } : { requestId: id };
+    return MiscellaneousRequestModel.findOneAndUpdate(
+      query,
+      { $push: { auditHistory: entry } },
+      { new: true }
+    );
   }
 
   async seedMiscellaneousDefaultsIfEmpty(): Promise<void> {

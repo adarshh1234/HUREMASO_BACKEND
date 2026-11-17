@@ -44,7 +44,19 @@ export interface IResume {
   parsedData?: IParsedResumeData;
   matchedVacancyId?: Types.ObjectId | any;
   matchScore?: number;
-  status: 'Uploaded' | 'Parsed' | 'Shortlisted' | 'Archived';
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  source?: 'LetsGetIn' | 'Direct Upload' | 'Referral' | string;
+  isVerifiedLetsGetIn?: boolean;
+  verifiedDate?: string;
+  assessmentScore?: number;
+  location?: string;
+  expectedSalary?: string;
+  noticePeriod?: string;
+  avatar?: string;
+  previousCompany?: string;
+  summary?: string;
+  status: 'Uploaded' | 'Parsed' | 'Shortlisted' | 'Archived' | 'New' | 'Screened' | 'Interview' | 'Offered';
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -67,7 +79,19 @@ export interface CreateResumeDTO {
   fileType?: string;
   matchedVacancyId?: string;
   matchScore?: number;
-  status?: 'Uploaded' | 'Parsed' | 'Shortlisted' | 'Archived';
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  source?: 'LetsGetIn' | 'Direct Upload' | 'Referral' | string;
+  isVerifiedLetsGetIn?: boolean;
+  verifiedDate?: string;
+  assessmentScore?: number;
+  location?: string;
+  expectedSalary?: string;
+  noticePeriod?: string;
+  avatar?: string;
+  previousCompany?: string;
+  summary?: string;
+  status?: 'Uploaded' | 'Parsed' | 'Shortlisted' | 'Archived' | 'New' | 'Screened' | 'Interview' | 'Offered';
 }
 
 export interface UpdateResumeDTO {
@@ -86,7 +110,19 @@ export interface UpdateResumeDTO {
   fileType?: string;
   matchedVacancyId?: string;
   matchScore?: number;
-  status?: 'Uploaded' | 'Parsed' | 'Shortlisted' | 'Archived';
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  source?: 'LetsGetIn' | 'Direct Upload' | 'Referral' | string;
+  isVerifiedLetsGetIn?: boolean;
+  verifiedDate?: string;
+  assessmentScore?: number;
+  location?: string;
+  expectedSalary?: string;
+  noticePeriod?: string;
+  avatar?: string;
+  previousCompany?: string;
+  summary?: string;
+  status?: 'Uploaded' | 'Parsed' | 'Shortlisted' | 'Archived' | 'New' | 'Screened' | 'Interview' | 'Offered';
 }
 
 export interface ParseCvRequestDTO {

@@ -54,6 +54,7 @@ router.use('/api/v1/legal', legalRoutes);
 router.use('/api/v1/employee-config', employeeConfigRoutes);
 router.use('/api/v1/mass-messages', massMessageRoutes);
 router.use('/api/v1/performance-appraisal', performanceAppraisalRoutes);
+router.use('/api/v1/performance-appraisals', performanceAppraisalRoutes);
 router.use('/api/v1/performance', performanceMasterRoutes);
 router.use('/api/v1/employee-reports', employeeReportRoutes);
 router.use('/api/v1/recruitment', recruitmentRoutes);

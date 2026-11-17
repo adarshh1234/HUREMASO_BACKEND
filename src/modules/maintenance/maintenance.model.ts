@@ -3,6 +3,7 @@ import {
   IMaintenanceTicketDocument,
   IHuremasoMaintenanceLogDocument,
   IHuremasoSystemHealthDocument,
+  ISystemDiagnosticDocument,
 } from './maintenance.types';
 
 // ================= 1. SUB-SCHEMAS =================
@@ -30,6 +31,17 @@ const TicketHistoryEntrySchema = new Schema(
   { _id: false }
 );
 
+const MaintenanceExecutionEntrySchema = new Schema(
+  {
+    id: { type: String, required: true },
+    action: { type: String, required: true },
+    performedBy: { type: String, required: true },
+    timestamp: { type: String, default: () => new Date().toISOString() },
+    notes: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
 // ================= 2. ACTIVE SUPPORT TICKET SCHEMA =================
 const MaintenanceTicketSchema = new Schema<IMaintenanceTicketDocument>(
   {
@@ -53,7 +65,7 @@ const MaintenanceTicketSchema = new Schema<IMaintenanceTicketDocument>(
     },
     priority: {
       type: String,
-      enum: ['Low', 'Medium', 'High', 'Urgent'],
+      enum: ['Low', 'Medium', 'High', 'Urgent', 'Critical'],
       default: 'High',
       index: true,
     },
@@ -65,7 +77,7 @@ const MaintenanceTicketSchema = new Schema<IMaintenanceTicketDocument>(
     },
     status: {
       type: String,
-      enum: ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'],
+      enum: ['Open', 'In Progress', 'On Hold', 'Pending', 'Resolved', 'Closed', 'Reopened'],
       default: 'Open',
       index: true,
     },
@@ -103,6 +115,14 @@ const MaintenanceTicketSchema = new Schema<IMaintenanceTicketDocument>(
     },
     closedDate: {
       type: String,
+    },
+    resolutionDetails: {
+      type: String,
+      trim: true,
+    },
+    attachments: {
+      type: [String],
+      default: [],
     },
     comments: {
       type: [TicketCommentSchema],
@@ -150,10 +170,19 @@ const HuremasoMaintenanceLogSchema = new Schema<IHuremasoMaintenanceLogDocument>
       default: '',
       trim: true,
     },
+    category: {
+      type: String,
+      default: 'Infrastructure',
+      trim: true,
+    },
     scheduledDate: {
       type: String,
       required: true,
       index: true,
+    },
+    scheduledTime: {
+      type: String,
+      default: '02:00 AM',
     },
     duration: {
       type: String,
@@ -162,9 +191,14 @@ const HuremasoMaintenanceLogSchema = new Schema<IHuremasoMaintenanceLogDocument>
     },
     status: {
       type: String,
-      enum: ['Scheduled', 'Pending', 'In Progress', 'Completed', 'Cancelled'],
-      default: 'Completed',
+      enum: ['Scheduled', 'Pending', 'In Progress', 'Completed', 'Failed', 'Cancelled'],
+      default: 'Scheduled',
       index: true,
+    },
+    priority: {
+      type: String,
+      enum: ['Low', 'Medium', 'High', 'Critical'],
+      default: 'Medium',
     },
     affectedServices: {
       type: [String],
@@ -174,9 +208,17 @@ const HuremasoMaintenanceLogSchema = new Schema<IHuremasoMaintenanceLogDocument>
       type: String,
       default: 'Huremaso Infrastructure Team',
     },
+    responsibleAdmin: {
+      type: String,
+      default: 'Infrastructure Lead',
+    },
     resolutionNotes: {
       type: String,
       default: '',
+    },
+    executionHistory: {
+      type: [MaintenanceExecutionEntrySchema],
+      default: [],
     },
   },
   {
@@ -213,17 +255,29 @@ const HuremasoSystemHealthSchema = new Schema<IHuremasoSystemHealthDocument>(
       type: Number,
       default: 99.98,
     },
+    uptimeSeconds: {
+      type: Number,
+      default: 0,
+    },
+    uptimeFormatted: {
+      type: String,
+      default: '0h 0m',
+    },
     activeNodesCount: {
       type: Number,
-      default: 8,
+      default: 1,
     },
     totalNodesCount: {
       type: Number,
-      default: 8,
+      default: 1,
     },
     databaseStatus: {
       type: String,
-      default: 'Optimized',
+      default: 'Connected',
+    },
+    databaseLatencyMs: {
+      type: Number,
+      default: 1,
     },
     fragmentationCount: {
       type: Number,
@@ -231,11 +285,15 @@ const HuremasoSystemHealthSchema = new Schema<IHuremasoSystemHealthDocument>(
     },
     cacheLatencyMs: {
       type: Number,
-      default: 12,
+      default: null,
     },
     redisStatus: {
       type: String,
-      default: 'Redis cluster fully synchronized',
+      default: 'Not Configured',
+    },
+    redisConfigured: {
+      type: Boolean,
+      default: false,
     },
     lastDiagnosticRun: {
       type: String,
@@ -260,4 +318,86 @@ const HuremasoSystemHealthSchema = new Schema<IHuremasoSystemHealthDocument>(
 export const HuremasoSystemHealthModel = model<IHuremasoSystemHealthDocument>(
   'HuremasoSystemHealth',
   HuremasoSystemHealthSchema
+);
+
+// ================= 5. SYSTEM DIAGNOSTIC SCHEMA =================
+const SystemDiagnosticSchema = new Schema<ISystemDiagnosticDocument>(
+  {
+    diagnosticId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
+    startedAt: {
+      type: String,
+      required: true,
+    },
+    completedAt: {
+      type: String,
+      required: true,
+    },
+    durationMs: {
+      type: Number,
+      required: true,
+    },
+    overallStatus: {
+      type: String,
+      enum: ['Healthy', 'Degraded', 'Critical'],
+      default: 'Healthy',
+      index: true,
+    },
+    serverHealth: {
+      status: { type: String, default: 'Healthy' },
+      uptimeSeconds: { type: Number, default: 0 },
+      uptimeFormatted: { type: String, default: '0s' },
+      memoryUsageMb: { type: Number, default: 0 },
+      totalMemoryMb: { type: Number, default: 0 },
+      nodeVersion: { type: String, default: '' },
+      activeNodes: { type: Number, default: 1 },
+      platform: { type: String, default: '' },
+      responseTimeMs: { type: Number, default: 0 },
+    },
+    databaseHealth: {
+      status: { type: String, default: 'Connected' },
+      connectionState: { type: String, default: 'Connected' },
+      pingLatencyMs: { type: Number, default: 0 },
+      databaseName: { type: String, default: '' },
+      collectionsCount: { type: Number, default: 0 },
+      detectedIssues: { type: [String], default: [] },
+      integrityStatus: { type: String, default: 'Optimal' },
+    },
+    cacheHealth: {
+      status: { type: String, default: 'Not Configured' },
+      latencyMs: { type: Number, default: null },
+      redisConfigured: { type: Boolean, default: false },
+      details: { type: String, default: 'No Redis cache cluster configured for this deployment.' },
+    },
+    recommendations: {
+      type: [String],
+      default: [],
+    },
+    executedBy: {
+      type: String,
+      default: 'System Administrator',
+    },
+    isReadonly: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id?.toString();
+        return ret;
+      },
+    },
+  }
+);
+
+export const SystemDiagnosticModel = model<ISystemDiagnosticDocument>(
+  'SystemDiagnostic',
+  SystemDiagnosticSchema
 );

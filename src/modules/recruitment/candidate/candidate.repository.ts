@@ -64,6 +64,35 @@ export class CandidateRepository {
       filter.skills = { $in: skillArr };
     }
 
+    if ((params as any).jobTitle) {
+      const jtRegex = new RegExp((params as any).jobTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$and = filter.$and || [];
+      filter.$and.push({ $or: [{ jobTitle: jtRegex }, { vacancy: jtRegex }] });
+    }
+
+    if ((params as any).keywords) {
+      const kwRegex = new RegExp((params as any).keywords.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$and = filter.$and || [];
+      filter.$and.push({
+        $or: [
+          { name: kwRegex },
+          { email: kwRegex },
+          { vacancy: kwRegex },
+          { skills: kwRegex },
+          { notes: kwRegex },
+          { education: kwRegex },
+          { currentCompany: kwRegex },
+          { currentDesignation: kwRegex },
+        ],
+      });
+    }
+
+    if ((params as any).dateFrom || (params as any).dateTo) {
+      filter.dateApplied = {};
+      if ((params as any).dateFrom) filter.dateApplied.$gte = (params as any).dateFrom;
+      if ((params as any).dateTo) filter.dateApplied.$lte = (params as any).dateTo;
+    }
+
     filter.isArchived = false;
 
     const page = Math.max(1, Number(params.page) || 1);

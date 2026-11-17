@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const createMaintenanceTicketSchema = z.object({
   title: z.string().min(2, 'Ticket title is required'),
   description: z.string().min(5, 'Ticket description is required'),
-  priority: z.enum(['Low', 'Medium', 'High', 'Urgent']).optional().default('High'),
+  priority: z.enum(['Low', 'Medium', 'High', 'Urgent', 'Critical']).optional().default('High'),
   category: z
     .enum(['System Error', 'Access Issue', 'Hardware', 'Software', 'Network', 'Database', 'Other'])
     .optional()
@@ -14,11 +14,12 @@ export const createMaintenanceTicketSchema = z.object({
   department: z.string().optional().default('Engineering'),
   assignedAgent: z.string().optional().default('Unassigned'),
   assignedAgentId: z.string().optional(),
+  attachments: z.array(z.string()).optional().default([]),
   tags: z.array(z.string()).optional().default([]),
 });
 
 export const updateMaintenanceTicketSchema = createMaintenanceTicketSchema.partial().extend({
-  status: z.enum(['Open', 'In Progress', 'Pending', 'Resolved', 'Closed']).optional(),
+  status: z.enum(['Open', 'In Progress', 'On Hold', 'Pending', 'Resolved', 'Closed', 'Reopened']).optional(),
   resolutionDetails: z.string().optional(),
 });
 
@@ -29,7 +30,7 @@ export const assignTicketSchema = z.object({
 });
 
 export const updateTicketStatusSchema = z.object({
-  status: z.enum(['Open', 'In Progress', 'Pending', 'Resolved', 'Closed']),
+  status: z.enum(['Open', 'In Progress', 'On Hold', 'Pending', 'Resolved', 'Closed', 'Reopened']),
   resolutionNotes: z.string().optional(),
   performedBy: z.string().optional().default('Support Agent'),
 });
@@ -46,15 +47,31 @@ export const addCommentSchema = z.object({
 export const createHuremasoLogSchema = z.object({
   title: z.string().min(2, 'Log title is required'),
   description: z.string().optional().default(''),
-  scheduledDate: z.string().min(1, 'Scheduled date/time is required'),
+  category: z.string().optional().default('Infrastructure'),
+  scheduledDate: z.string().min(1, 'Scheduled date is required'),
+  scheduledTime: z.string().optional().default('02:00 AM'),
   duration: z.string().optional().default('15 mins'),
-  status: z.enum(['Scheduled', 'Pending', 'In Progress', 'Completed', 'Cancelled']).optional().default('Scheduled'),
+  status: z.enum(['Scheduled', 'Pending', 'In Progress', 'Completed', 'Failed', 'Cancelled']).optional().default('Scheduled'),
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional().default('Medium'),
   affectedServices: z.array(z.string()).optional().default(['Huremaso Core API']),
   performedBy: z.string().optional().default('Huremaso Infrastructure Team'),
+  responsibleAdmin: z.string().optional().default('Infrastructure Lead'),
   resolutionNotes: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 export const updateHuremasoLogSchema = createHuremasoLogSchema.partial();
+
+export const updateHuremasoLogStatusSchema = z.object({
+  status: z.enum(['Scheduled', 'Pending', 'In Progress', 'Completed', 'Failed', 'Cancelled']),
+  notes: z.string().optional(),
+  performedBy: z.string().optional().default('Infrastructure Lead'),
+});
+
+export const cancelHuremasoLogSchema = z.object({
+  reason: z.string().min(1, 'Cancellation reason is required'),
+  performedBy: z.string().optional().default('Infrastructure Lead'),
+});
 
 // ================= 3. QUERY FILTER SCHEMA =================
 export const maintenanceQueryFilterSchema = z.object({

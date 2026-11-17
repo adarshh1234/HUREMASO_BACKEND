@@ -12,6 +12,10 @@ router.patch('/:id', (req, res, next) => talentPoolController.update(req, res, n
 router.delete('/:id', (req, res, next) => talentPoolController.delete(req, res, next));
 router.post('/:id/candidates', (req, res, next) => talentPoolController.addCandidate(req, res, next));
 router.post('/:id/associate-job', (req, res, next) => talentPoolController.associateJob(req, res, next));
+router.post('/:id/candidates/:candidateId/associate', (req, res, next) => {
+  req.body.candidateId = req.params.candidateId;
+  return talentPoolController.associateJob(req, res, next);
+});
 router.delete('/:id/candidates/:candidateId', (req, res, next) =>
   talentPoolController.removeCandidate(req, res, next)
 );

@@ -158,9 +158,81 @@ export class TalentPoolService {
   }
 
   async getAllTalentPools(params: TalentPoolQueryParams) {
-    const { items, total } = await this.repo.findAll(params);
+    let { items, total } = await this.repo.findAll(params);
+
+    if (total === 0) {
+      const canonicalPools = [
+        {
+          name: 'Technical Skills',
+          description: 'Programming, Data Analysis, Cloud Computing',
+          department: 'Engineering',
+          tags: ['Programming', 'Data Analysis', 'Cloud Computing', 'Backend'],
+        },
+        {
+          name: 'React Developer',
+          description: 'Communication, Js, Teamwork, React',
+          department: 'Engineering',
+          tags: ['Communication', 'JavaScript', 'Js', 'Teamwork', 'React', 'TypeScript'],
+        },
+        {
+          name: 'Design Skills',
+          description: 'UI/UX, Graphic Design, Prototyping',
+          department: 'Design',
+          tags: ['UI/UX', 'Graphic Design', 'Prototyping', 'Figma'],
+        },
+        {
+          name: 'Data & Analytics',
+          description: 'Python, SQL, Machine Learning, Data Analysis',
+          department: 'Data',
+          tags: ['Python', 'SQL', 'Machine Learning', 'Data Analysis'],
+        },
+        {
+          name: 'Soft Skills',
+          description: 'Communication, Leadership, Teamwork',
+          department: 'Human Resources',
+          tags: ['Communication', 'Leadership', 'Teamwork', 'Management'],
+        },
+        {
+          name: 'Mobile Engineering',
+          description: 'React Native, Flutter, Swift, Android',
+          department: 'Engineering',
+          tags: ['React Native', 'Flutter', 'Swift', 'Android', 'iOS'],
+        },
+      ];
+      for (const p of canonicalPools) {
+        await this.repo.create(p);
+      }
+      const recheck = await this.repo.findAll(params);
+      items = recheck.items;
+      total = recheck.total;
+    }
+
+    const enriched = await Promise.all(
+      items.map(async (poolDoc) => {
+        const pool = poolDoc.toJSON() as any;
+        const poolName = pool.name;
+        const tags = pool.tags || [];
+
+        const count = await CandidateModel.countDocuments({
+          $or: [
+            { poolCategory: poolName },
+            { talentPool: poolName },
+            { tags: poolName },
+            { skills: { $in: [poolName, ...tags] } },
+          ],
+          isArchived: false,
+        });
+
+        return {
+          ...pool,
+          candidateCount: count,
+          totalCandidates: count,
+        };
+      })
+    );
+
     return {
-      items: items.map((i) => i.toJSON() as unknown as ITalentPool),
+      items: enriched,
       total,
       page: Number(params.page) || 1,
       limit: Number(params.limit) || 50,

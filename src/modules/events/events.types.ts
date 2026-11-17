@@ -1,21 +1,32 @@
 import { Document, Types } from 'mongoose';
 
-export type EventStatus = 'Draft' | 'Planing' | 'In Progress' | 'Up coming' | 'Completed' | 'Cancelled';
+export type EventStatus =
+  | 'Draft'
+  | 'Planing'
+  | 'Planning'
+  | 'In Progress'
+  | 'Up coming'
+  | 'Upcoming'
+  | 'Completed'
+  | 'Cancelled';
+
 export type LocationType = 'in-person' | 'online';
 
 export interface IEventTask {
   id?: string;
   name: string;
   due: string;
+  dueDate?: string;
   assignee: string;
   status: 'In Progress' | 'Pending' | 'Not Started' | 'Completed';
+  priority?: 'Low' | 'Medium' | 'High';
   progress?: number;
 }
 
 export interface IEventBudgetInfo {
   allocated: number;
   spent: number;
-  status: 'Approved' | 'Pending Review' | 'Over Budget';
+  status: 'Approved' | 'Pending Review' | 'Over Budget' | 'Rejected';
 }
 
 export interface ICompanyEvent {
@@ -57,10 +68,15 @@ export interface ISupportEvent {
   title: string;
   description: string;
   author: string;
+  requesterEmail?: string;
+  department?: string;
+  category?: string;
+  priority?: 'Low' | 'Medium' | 'High' | 'Urgent';
+  assignedAgent?: string;
   timeAgo?: string;
   replaysCount: number;
-  status: 'Open' | 'Pending' | 'Resolved' | 'Closed';
-  replies?: Array<{ author: string; text: string; date: string }>;
+  status: 'Open' | 'In Progress' | 'Pending' | 'Resolved' | 'Closed';
+  replies?: Array<{ id?: string; author: string; text: string; date: string }>;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -73,9 +89,11 @@ export interface IEventsNewsletter {
   title: string;
   category: string;
   publishDate: string;
+  scheduleDate?: string;
   author: string;
   reads: number;
   likes: number;
+  likedBy?: string[];
   status: 'Published' | 'Draft' | 'Scheduled';
   summary: string;
   content?: string;
@@ -85,6 +103,17 @@ export interface IEventsNewsletter {
 
 export type IEventsNewsletterDocument = Document & IEventsNewsletter;
 
+export interface IEventExpense {
+  id?: string;
+  description: string;
+  category: string;
+  amount: number;
+  date: string;
+  vendor?: string;
+  recordedBy?: string;
+  approvalStatus: 'Approved' | 'Pending Review' | 'Rejected';
+}
+
 export interface IEventsBudgetItem {
   _id?: string | Types.ObjectId;
   id?: string;
@@ -93,8 +122,9 @@ export interface IEventsBudgetItem {
   category: string;
   allocated: number;
   spent: number;
-  status: 'Approved' | 'Pending Review' | 'Over Budget';
+  status: 'Approved' | 'Pending Review' | 'Over Budget' | 'Rejected';
   owner: string;
+  expenses?: IEventExpense[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -107,6 +137,7 @@ export interface EventQueryParams {
   search?: string;
   status?: string;
   eventType?: string;
+  category?: string;
   department?: string;
   month?: string;
   year?: string;
@@ -122,4 +153,5 @@ export interface EventsSummaryStats {
   budgetVariance: number;
   totalNewsletters: number;
   totalSupportTickets: number;
+  totalSupportEvents?: number;
 }

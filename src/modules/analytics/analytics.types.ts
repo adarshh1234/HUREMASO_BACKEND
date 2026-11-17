@@ -7,6 +7,7 @@ export interface IReportFilterParams {
   status?: string;
   category?: string;
   type?: string;
+  period?: string;
   search?: string;
   page?: number;
   limit?: number;
@@ -354,6 +355,15 @@ export interface IWellnessReportData {
     claimsCount: number;
     avgBonusAchievement: number;
   }>;
+  records: Array<{
+    id: string;
+    employeeName: string;
+    department: string;
+    type: string;
+    amount: number;
+    status: string;
+    effectiveDate?: string;
+  }>;
   pagination: IPaginationMeta;
 }
 
@@ -403,6 +413,37 @@ export interface INotificationsReportData {
     recipients: string;
     status: string;
     createdAt?: string;
+  }>;
+  pagination: IPaginationMeta;
+}
+
+export interface ITaskReportData {
+  summary: {
+    totalTasks: number;
+    completedTasks: number;
+    inProgressTasks: number;
+    scheduledTasks: number;
+    newTaskCount: number;
+    completionRate: number;
+    overdueCount: number;
+  };
+  priorityDistribution: IDistributionItem[];
+  statusDistribution: IDistributionItem[];
+  departmentBreakdown: Array<{
+    department: string;
+    total: number;
+    completed: number;
+    rate: number;
+  }>;
+  records: Array<{
+    id: string;
+    title: string;
+    column: string;
+    priority: string;
+    type: string;
+    assigneeName?: string;
+    dueDate?: string;
+    completedAt?: string;
   }>;
   pagination: IPaginationMeta;
 }
@@ -533,6 +574,47 @@ export interface IEmployeeOfPeriodRecord {
   keyQuote?: string;
   badge: string;
   awardedDate: string;
+  status?: 'Proposed' | 'Approved';
+  approvedBy?: string;
+  scoringBreakdown?: {
+    appraisalScore: number;
+    goalScore: number;
+    taskScore: number;
+    attendanceScore: number;
+    contributionScore: number;
+  };
+}
+
+export interface IRecognitionCandidate {
+  rank: number;
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  role: string;
+  totalScore: number;
+  scoringBreakdown: {
+    appraisalScore: number;
+    goalScore: number;
+    taskScore: number;
+    attendanceScore: number;
+    contributionScore: number;
+  };
+  metrics: {
+    appraisalRating: number;
+    completedTasks: number;
+    attendanceRate: number;
+    tenureYears: number;
+  };
+  status: 'Proposed' | 'Approved';
+  isApprovedWinner: boolean;
+}
+
+export interface IApproveWinnerDTO {
+  periodType: 'week' | 'month' | 'year';
+  periodLabel: string;
+  employeeId: string;
+  remarks?: string;
+  approvedBy?: string;
 }
 
 export interface IEmployeeOfPeriodAnalytics {

@@ -18,6 +18,11 @@ const TaskSchema = new Schema<ITaskDocument>(
     dueDate: {
       type: String,
       trim: true,
+      index: true,
+    },
+    startDate: {
+      type: String,
+      trim: true,
     },
     column: {
       type: String,
@@ -33,6 +38,7 @@ const TaskSchema = new Schema<ITaskDocument>(
       type: String,
       enum: ['Low', 'Medium', 'High', 'Urgent'],
       default: 'Medium',
+      index: true,
     },
     assigneeId: {
       type: Schema.Types.ObjectId,
@@ -41,6 +47,17 @@ const TaskSchema = new Schema<ITaskDocument>(
       index: true,
     },
     assigneeName: {
+      type: String,
+      trim: true,
+    },
+    assigneeAvatar: {
+      type: String,
+      trim: true,
+    },
+    completedAt: {
+      type: Date,
+    },
+    createdBy: {
       type: String,
       trim: true,
     },
@@ -80,6 +97,9 @@ const TodoSchema = new Schema<ITodoDocument>(
       default: false,
       index: true,
     },
+    completedAt: {
+      type: Date,
+    },
     dueDate: {
       type: String,
       default: 'Today',
@@ -88,6 +108,10 @@ const TodoSchema = new Schema<ITodoDocument>(
     priority: {
       type: String,
       default: 'Normal',
+    },
+    description: {
+      type: String,
+      trim: true,
     },
     employeeId: {
       type: Schema.Types.ObjectId,

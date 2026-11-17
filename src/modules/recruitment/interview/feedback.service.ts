@@ -8,34 +8,80 @@ export class FeedbackService {
   constructor(private repo: FeedbackRepository = feedbackRepository) {}
 
   async createFeedback(dto: CreateFeedbackDTO): Promise<IFeedback> {
-    const interview = await InterviewModel.findById(dto.interviewId);
-    if (!interview) {
-      throw new AppError('Interview not found', 404);
+    const payload = { ...dto };
+
+    // 1. Resolve candidate
+    let candidate = null;
+    if (payload.candidateId) {
+      candidate = await CandidateModel.findById(payload.candidateId);
+    } else if (payload.candidateName) {
+      candidate = await CandidateModel.findOne({
+        $or: [
+          { name: new RegExp(`^${payload.candidateName.trim()}$`, 'i') },
+          { firstName: new RegExp(`^${payload.candidateName.trim()}$`, 'i') },
+        ],
+      });
+      if (candidate) {
+        payload.candidateId = candidate._id.toString();
+      }
     }
 
-    const candidate = await CandidateModel.findById(dto.candidateId);
-    if (!candidate) {
-      throw new AppError('Candidate not found', 404);
+    if (candidate) {
+      if (!payload.candidateName) payload.candidateName = candidate.name;
+      if (!payload.position) payload.position = candidate.jobTitle || candidate.vacancy || 'Engineering';
     }
 
-    const created = await this.repo.create(dto);
-
-    // Update interview status to Completed and feedbackSubmitted = true
     const resultStatus =
-      dto.recommendation === 'Strong Hire' || dto.recommendation === 'Hire'
+      payload.recommendation === 'Strong Hire' || payload.recommendation === 'Hire'
         ? 'Passed'
-        : dto.recommendation === 'Reject'
+        : payload.recommendation === 'Reject'
         ? 'Failed'
         : 'On Hold';
 
-    await InterviewModel.findByIdAndUpdate(dto.interviewId, {
-      $set: {
-        feedbackSubmitted: true,
+    // 2. Resolve or auto-link interview
+    if (payload.interviewId) {
+      const interview = await InterviewModel.findById(payload.interviewId);
+      if (interview) {
+        await InterviewModel.findByIdAndUpdate(payload.interviewId, {
+          $set: {
+            feedbackSubmitted: true,
+            status: 'Completed',
+            rating: payload.overallRating,
+            result: resultStatus,
+          },
+        });
+      }
+    } else if (candidate) {
+      // Auto-create interview record to connect the complete workflow
+      const autoInterview = await InterviewModel.create({
+        candidateId: candidate._id,
+        vacancyId: candidate.vacancyId,
+        roundName: 'Technical & Culture Assessment',
+        interviewDate: payload.interviewDate ? new Date(payload.interviewDate) : new Date(),
+        startTime: '10:00 AM',
+        endTime: '11:00 AM',
+        interviewers: [{ name: payload.interviewerName || 'Interviewer' }],
+        interviewType: 'Technical',
         status: 'Completed',
-        rating: dto.overallRating,
+        feedbackSubmitted: true,
+        rating: payload.overallRating,
         result: resultStatus,
-      },
-    });
+      });
+      payload.interviewId = autoInterview._id.toString();
+    }
+
+    const created = await this.repo.create(payload as any);
+
+    // 3. Synchronize candidate status
+    if (candidate) {
+      const newStatus =
+        payload.recommendation === 'Strong Hire' || payload.recommendation === 'Hire'
+          ? 'Interview Passed'
+          : payload.recommendation === 'Reject'
+          ? 'Rejected'
+          : 'Interview';
+      await CandidateModel.findByIdAndUpdate(candidate._id, { $set: { status: newStatus } });
+    }
 
     return created.toJSON() as unknown as IFeedback;
   }
@@ -73,7 +119,7 @@ export class FeedbackService {
     }
   }
 
-  async getAllFeedback(params: { candidateId?: string; interviewId?: string }): Promise<IFeedback[]> {
+  async getAllFeedback(params: { candidateId?: string; interviewId?: string; search?: string; status?: string; recommendation?: string }): Promise<IFeedback[]> {
     const items = await this.repo.findAll(params);
     return items.map((i) => i.toJSON() as unknown as IFeedback);
   }

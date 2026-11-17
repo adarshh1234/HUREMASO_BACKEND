@@ -269,6 +269,66 @@ export class EventRepository {
     return !!result;
   }
 
+  // Event Tasks
+  async addTaskToEvent(eventId: string, task: any): Promise<ICompanyEventDocument | null> {
+    await this.ensureSeedData();
+    const event = await CompanyEventModel.findById(eventId);
+    if (!event) return null;
+
+    const taskId = task.id || `TSK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newTask = {
+      ...task,
+      id: taskId,
+      status: task.status || 'In Progress',
+      priority: task.priority || 'Medium',
+      progress: task.progress || 0,
+    };
+
+    const tasks = [...(event.tasks || []), newTask];
+    const completed = tasks.filter((t: any) => t.status === 'Completed').length;
+    event.tasks = tasks as any;
+    event.progress = `${completed}/${tasks.length} Task`;
+    return event.save();
+  }
+
+  async updateTaskInEvent(eventId: string, taskId: string, updates: any): Promise<ICompanyEventDocument | null> {
+    await this.ensureSeedData();
+    const event = await CompanyEventModel.findById(eventId);
+    if (!event) return null;
+
+    let found = false;
+    const tasks = (event.tasks || []).map((t: any) => {
+      if (t.id === taskId || (t as any)._id?.toString() === taskId) {
+        found = true;
+        const updated = { ...t.toObject ? t.toObject() : t, ...updates };
+        if (updates.status === 'Completed' && updates.progress === undefined) {
+          updated.progress = 100;
+        }
+        return updated;
+      }
+      return t;
+    });
+
+    if (!found) return null;
+
+    const completed = tasks.filter((t: any) => t.status === 'Completed').length;
+    event.tasks = tasks as any;
+    event.progress = `${completed}/${tasks.length} Task`;
+    return event.save();
+  }
+
+  async deleteTaskFromEvent(eventId: string, taskId: string): Promise<ICompanyEventDocument | null> {
+    await this.ensureSeedData();
+    const event = await CompanyEventModel.findById(eventId);
+    if (!event) return null;
+
+    const tasks = (event.tasks || []).filter((t: any) => t.id !== taskId && (t as any)._id?.toString() !== taskId);
+    const completed = tasks.filter((t: any) => t.status === 'Completed').length;
+    event.tasks = tasks as any;
+    event.progress = `${completed}/${tasks.length} Task`;
+    return event.save();
+  }
+
   // Support Events CRUD
   async findAllSupportEvents(): Promise<ISupportEventDocument[]> {
     await this.ensureSeedData();
@@ -309,6 +369,34 @@ export class EventRepository {
     return !!result;
   }
 
+  async toggleLikeNewsletter(id: string, employeeId: string = 'Current Employee'): Promise<IEventsNewsletterDocument | null> {
+    await this.ensureSeedData();
+    const item = await EventsNewsletterModel.findById(id);
+    if (!item) return null;
+
+    const likedBy = item.likedBy || [];
+    const alreadyLiked = likedBy.includes(employeeId);
+
+    if (alreadyLiked) {
+      item.likedBy = likedBy.filter((e) => e !== employeeId);
+      item.likes = Math.max(0, (item.likes || 1) - 1);
+    } else {
+      item.likedBy = [...likedBy, employeeId];
+      item.likes = (item.likes || 0) + 1;
+    }
+
+    return item.save();
+  }
+
+  async incrementReadsNewsletter(id: string): Promise<IEventsNewsletterDocument | null> {
+    await this.ensureSeedData();
+    return EventsNewsletterModel.findByIdAndUpdate(
+      id,
+      { $inc: { reads: 1 } },
+      { new: true }
+    );
+  }
+
   // Budgets CRUD
   async findAllBudgets(): Promise<IEventsBudgetItemDocument[]> {
     await this.ensureSeedData();
@@ -327,6 +415,42 @@ export class EventRepository {
   async deleteBudgetById(id: string): Promise<boolean> {
     const result = await EventsBudgetModel.findByIdAndDelete(id);
     return !!result;
+  }
+
+  async addExpenseToBudget(id: string, expense: any): Promise<IEventsBudgetItemDocument | null> {
+    await this.ensureSeedData();
+    const budget = await EventsBudgetModel.findById(id);
+    if (!budget) return null;
+
+    const expenseId = expense.id || `EXP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newExpense = {
+      ...expense,
+      id: expenseId,
+      amount: Number(expense.amount) || 0,
+      date: expense.date || new Date().toISOString().split('T')[0],
+      approvalStatus: expense.approvalStatus || 'Approved',
+    };
+
+    const expenses = [...(budget.expenses || []), newExpense];
+    const totalSpent = expenses.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+
+    budget.expenses = expenses as any;
+    budget.spent = totalSpent;
+    if (totalSpent > budget.allocated) {
+      budget.status = 'Over Budget';
+    }
+
+    // Also sync with CompanyEvent if eventId is linked
+    if (budget.eventId) {
+      await CompanyEventModel.findByIdAndUpdate(budget.eventId, {
+        $set: {
+          'budget.spent': totalSpent,
+          'budget.status': budget.status,
+        },
+      }).catch(() => null);
+    }
+
+    return budget.save();
   }
 
   // Summary Stats
@@ -358,6 +482,7 @@ export class EventRepository {
       budgetVariance,
       totalNewsletters: newsletters,
       totalSupportTickets: supportTickets,
+      totalSupportEvents: supportTickets,
     };
   }
 }

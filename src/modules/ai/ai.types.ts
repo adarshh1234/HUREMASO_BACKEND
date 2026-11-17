@@ -126,6 +126,14 @@ export interface IEmployeeSentimentMetrics {
 export type ComplianceStatus = 'Compliant' | 'At Risk' | 'Non-Compliant' | 'Audit Ready';
 export type ComplianceCategory = 'Statutory' | 'Labor Law' | 'Tax' | 'Safety' | 'Privacy & Data' | 'Internal Policy';
 
+export interface IComplianceDiscrepancy {
+  employeeId?: string;
+  employeeName?: string;
+  issue: string;
+  severity: 'Critical' | 'Warning' | 'Notice';
+  recommendation: string;
+}
+
 export interface IComplianceRecord {
   complianceCode: string;
   title: string;
@@ -153,4 +161,60 @@ export interface IComplianceScanResult {
   discrepanciesFound: number;
   status: ComplianceStatus;
   summary: string;
+  discrepancies?: IComplianceDiscrepancy[];
+}
+
+// ================= 5. KNOWLEDGE BASE & RAG =================
+
+export type KnowledgeCategory =
+  | 'Company Policy'
+  | 'Leave & Attendance'
+  | 'Compensation & Benefits'
+  | 'Statutory & Compliance'
+  | 'Performance & Development'
+  | 'Onboarding & Culture';
+
+export interface IKnowledgeDocument {
+  documentId: string;
+  title: string;
+  category: KnowledgeCategory;
+  version: string;
+  jurisdiction: string;
+  summary: string;
+  content: string;
+  effectiveDate: string;
+  lastReviewDate: string;
+  tags: string[];
+  chunkCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface IKnowledgeDocumentDocument extends IKnowledgeDocument, Document {}
+
+export interface IKnowledgeChunk {
+  chunkId: string;
+  documentId: string;
+  documentTitle: string;
+  category: KnowledgeCategory;
+  sectionHeader: string;
+  content: string;
+  keywords: string[];
+  tokensCount: number;
+  metadata?: Record<string, any>;
+}
+
+export interface IKnowledgeChunkDocument extends IKnowledgeChunk, Document {}
+
+export interface IRAGSearchResult {
+  chunk: IKnowledgeChunk;
+  score: number;
+  citation: string;
+}
+
+export interface ICitation {
+  source: string;
+  section: string;
+  category: string;
+  snippet?: string;
 }

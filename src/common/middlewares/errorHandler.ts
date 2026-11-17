@@ -39,6 +39,7 @@ export const errorHandler = (
 
   return res.status(statusCode).json({
     success: false,
+    message,
     error: {
       code: err.code || (statusCode === 400 ? 'VALIDATION_ERROR' : statusCode === 404 ? 'NOT_FOUND' : 'SERVER_ERROR'),
       message,

@@ -13,9 +13,12 @@ import {
   updatePsychometricSchema,
   updateEsopsSchema,
   updateReviewSectionSchema,
+  add360FeedbackSchema,
   addEndorsementSchema,
   updateStrategySchema,
   updateAnalyticsAiSchema,
+  createAppraisalCycleSchema,
+  updateAppraisalCycleSchema,
   queryAppraisalSchema,
   mongoIdSchema,
 } from './performanceAppraisal.validator';
@@ -59,7 +62,7 @@ export class PerformanceAppraisalController {
   create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const validated = createAppraisalSchema.parse(req.body);
-      const item = await this.service.create(validated as any);
+      const item = await this.service.create(validated as any, req.user);
       sendResponse({
         res,
         statusCode: 201,
@@ -80,6 +83,38 @@ export class PerformanceAppraisalController {
         res,
         statusCode: 200,
         message: 'Performance appraisal record updated successfully',
+        data: item,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // Section 1: Regenerate AI Report
+  generateAiReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const item = await this.service.generateAiReport(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'AI appraisal report recalculated and generated successfully',
+        data: item,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // Section 2: Sync Attendance and Tasks
+  syncAttendanceAndTasks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const item = await this.service.syncAttendanceAndTasks(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Attendance and task velocity metrics synchronized successfully',
         data: item,
       });
     } catch (err) {
@@ -171,11 +206,27 @@ export class PerformanceAppraisalController {
     try {
       const id = mongoIdSchema.parse(req.params.id);
       const validated = updateReviewSectionSchema.parse(req.body);
-      const item = await this.service.updateReview(id, validated as any);
+      const item = await this.service.updateReview(id, validated as any, req.user);
       sendResponse({
         res,
         statusCode: 200,
         message: 'Performance review updated successfully',
+        data: item,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  add360Feedback = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const validated = add360FeedbackSchema.parse(req.body);
+      const item = await this.service.add360Feedback(id, validated);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: '360 degree feedback submitted successfully',
         data: item,
       });
     } catch (err) {
@@ -231,6 +282,21 @@ export class PerformanceAppraisalController {
     }
   };
 
+  getExportData = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const data = await this.service.getExportData(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Appraisal intelligence report data ready for export',
+        data,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   delete = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = mongoIdSchema.parse(req.params.id);
@@ -252,6 +318,79 @@ export class PerformanceAppraisalController {
         res,
         statusCode: 200,
         data: summary,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // --- Cycles Controllers ---
+  getAllCycles = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const cycles = await this.service.getAllCycles();
+      sendResponse({
+        res,
+        statusCode: 200,
+        data: cycles,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getCycleById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const cycle = await this.service.getCycleById(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        data: cycle,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  createCycle = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const validated = createAppraisalCycleSchema.parse(req.body);
+      const cycle = await this.service.createCycle(validated as any, req.user);
+      sendResponse({
+        res,
+        statusCode: 201,
+        message: 'Appraisal cycle created successfully',
+        data: cycle,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateCycle = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const validated = updateAppraisalCycleSchema.parse(req.body);
+      const cycle = await this.service.updateCycle(id, validated as any);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Appraisal cycle updated successfully',
+        data: cycle,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  deleteCycle = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      await this.service.deleteCycle(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Appraisal cycle deleted successfully',
       });
     } catch (err) {
       next(err);

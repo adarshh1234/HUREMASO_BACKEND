@@ -5,6 +5,7 @@ import {
   updateAssociationSchema,
   approveRejectAssociationSchema,
   deactivateAssociationSchema,
+  renewAssociationSchema,
   associationQueryFilterSchema,
 } from './association.validator';
 import { sendResponse } from '../../common/utils/apiResponse';
@@ -172,6 +173,22 @@ export class AssociationController {
         res,
         statusCode: 200,
         message: `Existing association cancelled/deactivated successfully`,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  renewExisting = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = getParam(req.params, 'id');
+      const parsed = renewAssociationSchema.parse(req.body);
+      const data = await this.service.renewExisting(id, parsed);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: `Association renewed and extended successfully`,
         data,
       });
     } catch (error) {

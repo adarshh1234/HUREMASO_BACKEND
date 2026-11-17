@@ -1,6 +1,12 @@
 import { FilterQuery } from 'mongoose';
 import { NotificationModel, INotificationDocument } from './notification.model';
-import { INotification, INotificationQuery, IPaginatedResult, NotificationStatus } from './notification.types';
+import {
+  INotification,
+  INotificationQuery,
+  IPaginatedResult,
+  NotificationStatus,
+  DeliveryStatus,
+} from './notification.types';
 import { escapeRegex } from '../../common/utils/regex';
 
 export class NotificationRepository {
@@ -54,6 +60,7 @@ export class NotificationRepository {
         { subject: searchRegex },
         { message: searchRegex },
         { recipients: searchRegex },
+        { 'recipientDeliveries.name': searchRegex },
       ];
     }
 
@@ -83,6 +90,100 @@ export class NotificationRepository {
         hasPrevPage: page > 1,
       },
     };
+  }
+
+  /**
+   * Find notifications addressed to a specific employee for in-app viewing
+   */
+  async findEmployeeNotifications(
+    employeeId: string,
+    email?: string,
+    page = 1,
+    limit = 20
+  ): Promise<{ data: INotificationDocument[]; total: number; unreadCount: number }> {
+    const skip = (Math.max(1, page) - 1) * limit;
+
+    const filter: FilterQuery<INotificationDocument> = {
+      status: NotificationStatus.SENT,
+      $or: [
+        { recipientType: 'ALL_EMPLOYEES' },
+        { 'recipientDeliveries.recipientId': employeeId },
+        ...(email ? [{ 'recipientDeliveries.contactAddress': email }] : []),
+      ],
+    };
+
+    const [data, total, allMatches] = await Promise.all([
+      NotificationModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+      NotificationModel.countDocuments(filter).exec(),
+      NotificationModel.find(filter).select('recipientDeliveries').exec(),
+    ]);
+
+    // Calculate unread count specifically for this employee
+    let unreadCount = 0;
+    for (const notif of allMatches) {
+      const match = notif.recipientDeliveries?.find(
+        (d) => d.recipientId === employeeId || (email && d.contactAddress === email)
+      );
+      if (!match || match.status !== DeliveryStatus.READ) {
+        unreadCount++;
+      }
+    }
+
+    return { data, total, unreadCount };
+  }
+
+  /**
+   * Mark notification as read for a specific recipient
+   */
+  async markRecipientAsRead(notificationId: string, recipientId: string): Promise<boolean> {
+    const notif = await NotificationModel.findById(notificationId);
+    if (!notif) return false;
+
+    let updated = false;
+    const deliveries = notif.recipientDeliveries || [];
+    for (const delivery of deliveries) {
+      if (delivery.recipientId === recipientId && delivery.status !== DeliveryStatus.READ) {
+        delivery.status = DeliveryStatus.READ;
+        delivery.readAt = new Date();
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      notif.readCount = deliveries.filter((d) => d.status === DeliveryStatus.READ).length;
+      await notif.save();
+    }
+    return updated;
+  }
+
+  /**
+   * Mark all notifications as read for a recipient
+   */
+  async markAllRecipientsAsRead(recipientId: string): Promise<number> {
+    const notifs = await NotificationModel.find({
+      'recipientDeliveries.recipientId': recipientId,
+      'recipientDeliveries.status': { $ne: DeliveryStatus.READ },
+    });
+
+    let count = 0;
+    for (const notif of notifs) {
+      let changed = false;
+      const deliveries = notif.recipientDeliveries || [];
+      for (const delivery of deliveries) {
+        if (delivery.recipientId === recipientId && delivery.status !== DeliveryStatus.READ) {
+          delivery.status = DeliveryStatus.READ;
+          delivery.readAt = new Date();
+          changed = true;
+          count++;
+        }
+      }
+      if (changed) {
+        notif.readCount = deliveries.filter((d) => d.status === DeliveryStatus.READ).length;
+        await notif.save();
+      }
+    }
+
+    return count;
   }
 }
 

@@ -12,7 +12,8 @@ import {
 
 const router = Router();
 
-// --- TODOS (Must be mounted before /:id to avoid route collision) ---
+// --- TODOS (Mounted before /:id to prevent route shadowing) ---
+router.get('/todos/stats', (req, res) => tasksController.getTodoStats(req, res));
 router.get('/todos', (req, res) => tasksController.getAllTodos(req, res));
 router.post('/todos', validateRequest(createTodoSchema), (req, res) => tasksController.createTodo(req, res));
 router.get('/todos/:id', (req, res) => tasksController.getTodoById(req, res));
@@ -21,6 +22,7 @@ router.patch('/todos/:id/toggle', validateRequest(toggleTodoSchema), (req, res) 
 router.delete('/todos/:id', (req, res) => tasksController.deleteTodo(req, res));
 
 // --- KANBAN TASKS ---
+router.get('/counts', (req, res) => tasksController.getTaskCounts(req, res));
 router.get('/', (req, res) => tasksController.getAllTasks(req, res));
 router.post('/', validateRequest(createTaskSchema), (req, res) => tasksController.createTask(req, res));
 router.get('/:id', (req, res) => tasksController.getTaskById(req, res));

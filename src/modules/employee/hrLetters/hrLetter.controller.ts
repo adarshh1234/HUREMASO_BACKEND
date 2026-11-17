@@ -7,8 +7,11 @@ import {
   generateLetterSchema,
   createCommunicationSchema,
   updateCommunicationSchema,
+  updateStatusSchema,
   createIssuedLetterSchema,
   updateIssuedLetterSchema,
+  aiDraftSchema,
+  pdfGenerationSchema,
   mongoIdSchema,
 } from './hrLetter.validator';
 
@@ -97,11 +100,12 @@ export class HrLetterController {
   // ==========================================
   getCommunications = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { type, status, department, search, page, limit, sortBy, sortOrder } = req.query as any;
+      const { type, status, department, priority, search, page, limit, sortBy, sortOrder } = req.query as any;
       const result = await this.service.getCommunications({
         type,
         status,
         department,
+        priority,
         search,
         page,
         limit,
@@ -166,12 +170,12 @@ export class HrLetterController {
   updateCommunicationStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = mongoIdSchema.parse(req.params.id);
-      const status = req.body.status || 'Published';
-      const result = await this.service.updateCommunicationStatus(id, status);
+      const validated = updateStatusSchema.parse(req.body);
+      const result = await this.service.updateCommunicationStatus(id, validated.status, validated.approvedBy);
       sendResponse({
         res,
         statusCode: 200,
-        message: `Communication status updated to ${status}`,
+        message: `Communication status updated to ${validated.status}`,
         data: result,
       });
     } catch (err) {
@@ -323,6 +327,85 @@ export class HrLetterController {
         statusCode: 200,
         message: 'Letter generated successfully',
         data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ==========================================
+  // AI ASSISTED DRAFTING
+  // ==========================================
+  generateAIDraft = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const validated = aiDraftSchema.parse(req.body);
+      const result = await this.service.generateAIDraft(validated);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: `AI Draft for ${validated.category.toUpperCase()} generated successfully`,
+        data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ==========================================
+  // PDF GENERATION & DOWNLOAD
+  // ==========================================
+  getCommunicationPDF = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const { buffer, filename } = await this.service.generateCommunicationPDF(id);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      res.status(200).send(buffer);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getRecordPDF = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const { buffer, filename } = await this.service.generateIssuedLetterPDF(id);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      res.status(200).send(buffer);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  generateDynamicPDF = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const validated = pdfGenerationSchema.parse(req.body);
+      const { buffer, filename } = await this.service.generateDynamicPDF(validated as any);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      res.status(200).send(buffer);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ==========================================
+  // STATS & METRICS
+  // ==========================================
+  getStatsSummary = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const stats = await this.service.getCountsSummary();
+      sendResponse({
+        res,
+        statusCode: 200,
+        data: stats,
       });
     } catch (err) {
       next(err);

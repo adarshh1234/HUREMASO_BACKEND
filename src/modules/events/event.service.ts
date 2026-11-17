@@ -61,6 +61,31 @@ export class EventService {
     }
   }
 
+  // Event Tasks
+  async addTaskToEvent(eventId: string, task: any): Promise<ICompanyEventDocument> {
+    const updated = await this.repo.addTaskToEvent(eventId, task);
+    if (!updated) {
+      throw AppError.notFound(`Event with ID ${eventId} not found`);
+    }
+    return updated;
+  }
+
+  async updateTaskInEvent(eventId: string, taskId: string, updates: any): Promise<ICompanyEventDocument> {
+    const updated = await this.repo.updateTaskInEvent(eventId, taskId, updates);
+    if (!updated) {
+      throw AppError.notFound(`Task ${taskId} in Event ${eventId} not found`);
+    }
+    return updated;
+  }
+
+  async deleteTaskFromEvent(eventId: string, taskId: string): Promise<ICompanyEventDocument> {
+    const updated = await this.repo.deleteTaskFromEvent(eventId, taskId);
+    if (!updated) {
+      throw AppError.notFound(`Event with ID ${eventId} not found`);
+    }
+    return updated;
+  }
+
   // Support Events
   async getAllSupportEvents(): Promise<ISupportEventDocument[]> {
     return this.repo.findAllSupportEvents();
@@ -123,6 +148,22 @@ export class EventService {
     }
   }
 
+  async toggleLikeNewsletter(id: string, employeeId?: string): Promise<IEventsNewsletterDocument> {
+    const updated = await this.repo.toggleLikeNewsletter(id, employeeId);
+    if (!updated) {
+      throw AppError.notFound(`Newsletter with ID ${id} not found`);
+    }
+    return updated;
+  }
+
+  async incrementReadsNewsletter(id: string): Promise<IEventsNewsletterDocument> {
+    const updated = await this.repo.incrementReadsNewsletter(id);
+    if (!updated) {
+      throw AppError.notFound(`Newsletter with ID ${id} not found`);
+    }
+    return updated;
+  }
+
   // Budgets
   async getAllBudgets(): Promise<IEventsBudgetItemDocument[]> {
     return this.repo.findAllBudgets();
@@ -145,6 +186,14 @@ export class EventService {
     if (!deleted) {
       throw AppError.notFound(`Budget item with ID ${id} not found`);
     }
+  }
+
+  async addExpenseToBudget(id: string, expense: any): Promise<IEventsBudgetItemDocument> {
+    const updated = await this.repo.addExpenseToBudget(id, expense);
+    if (!updated) {
+      throw AppError.notFound(`Budget item with ID ${id} not found`);
+    }
+    return updated;
   }
 
   // Stats

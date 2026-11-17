@@ -1,6 +1,12 @@
 import { Request, Response } from 'express';
 import { notesService } from './notes.service';
 
+function getStatusCode(error: any): number {
+  if (error.statusCode) return error.statusCode;
+  if (error.name === 'ValidationError' || error.name === 'CastError') return 400;
+  return 500;
+}
+
 export class NotesController {
   async getAll(req: Request, res: Response): Promise<void> {
     try {
@@ -13,9 +19,39 @@ export class NotesController {
         total: result.total,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to fetch notes',
+      });
+    }
+  }
+
+  async getCategoryCounts(req: Request, res: Response): Promise<void> {
+    try {
+      const counts = await notesService.getCategoryCounts();
+      res.status(200).json({
+        success: true,
+        data: counts,
+      });
+    } catch (error: any) {
+      res.status(getStatusCode(error)).json({
+        success: false,
+        message: error.message || 'Failed to fetch category counts',
+      });
+    }
+  }
+
+  async getAllTags(req: Request, res: Response): Promise<void> {
+    try {
+      const tags = await notesService.getAllTags();
+      res.status(200).json({
+        success: true,
+        data: tags,
+      });
+    } catch (error: any) {
+      res.status(getStatusCode(error)).json({
+        success: false,
+        message: error.message || 'Failed to fetch tags',
       });
     }
   }
@@ -36,7 +72,7 @@ export class NotesController {
         data: note,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to fetch note',
       });
@@ -52,7 +88,7 @@ export class NotesController {
         data: note,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to create note',
       });
@@ -76,7 +112,7 @@ export class NotesController {
         data: note,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to update note',
       });
@@ -86,7 +122,7 @@ export class NotesController {
   async togglePin(req: Request, res: Response): Promise<void> {
     try {
       const id = req.params.id as string;
-      const { pinned } = req.body;
+      const { pinned } = req.body || {};
       const note = await notesService.togglePin(id, pinned);
       if (!note) {
         res.status(404).json({
@@ -101,9 +137,60 @@ export class NotesController {
         data: note,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to toggle pin status',
+      });
+    }
+  }
+
+  async updateChecklist(req: Request, res: Response): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const { checklistItems } = req.body;
+      const note = await notesService.updateChecklist(id, checklistItems);
+      if (!note) {
+        res.status(404).json({
+          success: false,
+          message: 'Note not found',
+        });
+        return;
+      }
+      res.status(200).json({
+        success: true,
+        message: 'Checklist updated successfully',
+        data: note,
+      });
+    } catch (error: any) {
+      res.status(getStatusCode(error)).json({
+        success: false,
+        message: error.message || 'Failed to update checklist',
+      });
+    }
+  }
+
+  async toggleChecklistItem(req: Request, res: Response): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const itemId = req.params.itemId as string;
+      const { completed } = req.body || {};
+      const note = await notesService.toggleChecklistItem(id, itemId, completed);
+      if (!note) {
+        res.status(404).json({
+          success: false,
+          message: 'Note or checklist item not found',
+        });
+        return;
+      }
+      res.status(200).json({
+        success: true,
+        message: 'Checklist item toggled successfully',
+        data: note,
+      });
+    } catch (error: any) {
+      res.status(getStatusCode(error)).json({
+        success: false,
+        message: error.message || 'Failed to toggle checklist item',
       });
     }
   }
@@ -125,7 +212,7 @@ export class NotesController {
         data: result,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to generate AI summary',
       });
@@ -148,7 +235,7 @@ export class NotesController {
         message: 'Note deleted successfully',
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to delete note',
       });

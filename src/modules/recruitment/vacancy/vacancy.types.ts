@@ -12,6 +12,8 @@ export interface IVacancy {
   hiringManager: string;
   noOfOpenings: number;
   numberOfPositions?: number;
+  numberOfOpenings?: number;
+  openings?: number;
   description: string;
   jobDescription?: string;
   requirements?: string;

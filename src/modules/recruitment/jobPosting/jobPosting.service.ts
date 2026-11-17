@@ -1,5 +1,7 @@
 import { JobPostingRepository, jobPostingRepository } from './jobPosting.repository';
 import { CreateJobPostingDTO, UpdateJobPostingDTO, JobPostingQueryParams, IJobPosting } from './jobPosting.types';
+import { VacancyModel } from '../vacancy/vacancy.model';
+import { CandidateModel } from '../candidate/candidate.model';
 import { AppError } from '../../../common/errors/AppError';
 
 export class JobPostingService {
@@ -10,8 +12,67 @@ export class JobPostingService {
     if (!payload.status) {
       payload.status = payload.platform === 'LetsGetIn' ? 'Live on Letgetin' : 'Draft';
     }
+
+    const title = payload.jobTitle || payload.title || 'Position';
+    payload.title = title;
+    payload.jobTitle = title;
+
+    // Automatically create or link the associated Vacancy if one does not exist
+    if (!payload.vacancyId) {
+      try {
+        const existingVac = await VacancyModel.findOne({
+          $or: [{ jobTitle: title }, { title: title }],
+          department: payload.department,
+          isArchived: false,
+        });
+
+        if (existingVac) {
+          payload.vacancyId = existingVac._id as any;
+        } else {
+          const reqs =
+            payload.qualifications ||
+            (Array.isArray(payload.skills) ? payload.skills.join(', ') : payload.skills) ||
+            '';
+          const newVac = await VacancyModel.create({
+            jobTitle: title,
+            title,
+            department: payload.department,
+            location: payload.location || payload.officeLocation || 'Remote',
+            locationType: payload.locationType || 'Remote / Hybrid',
+            employmentType: payload.employmentType || 'Full-time',
+            noOfOpenings: 1,
+            numberOfPositions: 1,
+            description: payload.description || '',
+            jobDescription: payload.description || '',
+            requirements: reqs,
+            status: payload.status === 'Draft' ? 'Draft' : 'Available',
+            datePosted: payload.postedDate || new Date().toISOString().split('T')[0],
+            minSalary: payload.minSalary,
+            maxSalary: payload.maxSalary,
+            currency: payload.currency || 'USD',
+          });
+          payload.vacancyId = newVac._id as any;
+        }
+      } catch (err) {
+        console.warn('Could not auto-link vacancy for job posting:', err);
+      }
+    }
+
     const created = await this.repo.create(payload);
-    return created.toJSON() as unknown as IJobPosting;
+    const json = created.toJSON() as unknown as IJobPosting;
+
+    // If platform is LetsGetIn, generate stable platform identifier & live URL
+    const id = json.id || (created as any)._id?.toString() || '';
+    if (payload.platform === 'LetsGetIn' && (!json.platformPostId || !json.liveUrl)) {
+      const platformPostId = `LGT-${id.slice(-6).toUpperCase()}`;
+      const liveUrl = `https://letgetin.com/jobs/${id}`;
+      const updated = await this.repo.update(id, { platformPostId, liveUrl });
+      if (updated) {
+        return updated.toJSON() as unknown as IJobPosting;
+      }
+    }
+
+    return json;
   }
 
   async getJobPostingById(id: string): Promise<IJobPosting> {
@@ -76,7 +137,7 @@ export class JobPostingService {
     return this.getAllJobPostings({
       ...params,
       platform: 'LetsGetIn',
-      status: 'Live on Letgetin',
+      status: (params.status || { $in: ['Live on Letgetin', 'Published'] }) as any,
     });
   }
 
@@ -97,12 +158,42 @@ export class JobPostingService {
   }
 
   async syncLetGetInStatus() {
-    const { total } = await this.repo.findAll({ platform: 'LetsGetIn', status: 'Live on Letgetin' });
+    const { items, total } = await this.repo.findAll({
+      platform: 'LetsGetIn',
+      status: ({ $in: ['Live on Letgetin', 'Published'] } as any),
+      limit: 1000,
+    });
+    let totalApplicants = 0;
+    let updatedRecords = 0;
+
+    for (const job of items) {
+      const queryOr: any[] = [];
+      if (job.vacancyId) queryOr.push({ vacancyId: job.vacancyId });
+      if (job.title) queryOr.push({ vacancy: job.title });
+      if (job.jobTitle && job.jobTitle !== job.title) queryOr.push({ vacancy: job.jobTitle });
+
+      const candCount = queryOr.length > 0
+        ? await CandidateModel.countDocuments({ $or: queryOr, isArchived: false })
+        : 0;
+
+      totalApplicants += candCount;
+
+      if (job.applicantsCount !== candCount) {
+        await this.repo.update(job._id.toString(), { applicantsCount: candCount });
+        updatedRecords++;
+      }
+    }
+
     return {
       connected: true,
-      status: '100% Operational',
+      status: 'synchronized',
+      operationalStatus: '100% Operational',
       platform: 'LetsGetIn Talent Network',
       activePostingsCount: total,
+      jobsSynchronized: total,
+      totalApplicants,
+      updatedRecords,
+      failedRecords: 0,
       lastSyncAt: new Date().toISOString(),
     };
   }

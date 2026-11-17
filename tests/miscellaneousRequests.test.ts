@@ -21,6 +21,7 @@ afterAll(async () => {
 describe('Miscellaneous Requests API Tests (/api/v1/support/miscellaneous & /api/v1/miscellaneous-requests)', () => {
   let createdReqId: string;
   let customReqId: string;
+  let workflowReqId: string;
 
   // ================= 1. CREATE REQUEST =================
   describe('POST /api/v1/support/miscellaneous', () => {
@@ -53,6 +54,8 @@ describe('Miscellaneous Requests API Tests (/api/v1/support/miscellaneous & /api
       expect(res.body.data.requestId).toBeDefined();
       expect(res.body.data.createdAt).toBeDefined();
       expect(res.body.data.updatedAt).toBeDefined();
+      expect(res.body.data.auditHistory).toBeDefined();
+      expect(res.body.data.auditHistory.length).toBeGreaterThanOrEqual(1);
 
       createdReqId = res.body.data.id || res.body.data._id;
       customReqId = res.body.data.requestId;
@@ -87,6 +90,22 @@ describe('Miscellaneous Requests API Tests (/api/v1/support/miscellaneous & /api
 
       expect(res.status).toBe(400);
     });
+
+    it('should create a request specifically for workflow lifecycle testing', async () => {
+      const res = await request(app)
+        .post('/api/v1/support/miscellaneous')
+        .send({
+          employee: 'Marcus Rashford',
+          email: 'marcus.r@company.com',
+          department: 'Operations',
+          requestType: 'Facility Repair',
+          description: 'HVAC repair required in sector 4 office.',
+          priority: 'High',
+        });
+
+      expect(res.status).toBe(201);
+      workflowReqId = res.body.data.id || res.body.data._id;
+    });
   });
 
   // ================= 2. SUMMARY COUNTS =================
@@ -100,8 +119,18 @@ describe('Miscellaneous Requests API Tests (/api/v1/support/miscellaneous & /api
       expect(typeof res.body.data.pending).toBe('number');
       expect(typeof res.body.data.approved).toBe('number');
       expect(typeof res.body.data.rejected).toBe('number');
+      expect(typeof res.body.data.inReview).toBe('number');
+      expect(typeof res.body.data.processed).toBe('number');
       expect(res.body.data.total).toBeGreaterThanOrEqual(2);
       expect(res.body.data.pending).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should also serve stats via /requests/stats alias', async () => {
+      const res = await request(app).get('/api/v1/support/requests/stats');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toBeDefined();
+      expect(typeof res.body.data.total).toBe('number');
     });
   });
 
@@ -194,7 +223,7 @@ describe('Miscellaneous Requests API Tests (/api/v1/support/miscellaneous & /api
     });
   });
 
-  // ================= 6. APPROVE / REJECT STATUS UPDATE =================
+  // ================= 6. APPROVE / REJECT / WORKFLOW STATUS UPDATES =================
   describe('PATCH /api/v1/support/miscellaneous/:id/status', () => {
     it('should approve the request', async () => {
       const res = await request(app)
@@ -209,12 +238,12 @@ describe('Miscellaneous Requests API Tests (/api/v1/support/miscellaneous & /api
       expect(res.body.data.comments).toBe('Approved by HR Director for immediate procurement.');
     });
 
-    it('should reject the request', async () => {
+    it('should reject the request with reason', async () => {
       const res = await request(app)
         .patch(`/api/v1/support/miscellaneous/${createdReqId}/status`)
         .send({
           status: 'Rejected',
-          comments: 'Exceeds equipment budget policy.',
+          rejectionReason: 'Exceeds equipment budget policy.',
         });
 
       expect(res.status).toBe(200);
@@ -232,7 +261,75 @@ describe('Miscellaneous Requests API Tests (/api/v1/support/miscellaneous & /api
     });
   });
 
-  // ================= 7. DELETE REQUEST =================
+  // ================= 7. DEDICATED WORKFLOW ENDPOINTS =================
+  describe('Workflow Endpoints: /review, /approve, /reject, /process, /history', () => {
+    it('should start review via /review endpoint', async () => {
+      const res = await request(app)
+        .patch(`/api/v1/support/miscellaneous/${workflowReqId}/review`)
+        .send({
+          reviewerName: 'Admin Officer',
+          remarks: 'Reviewing budget feasibility',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe('In Review');
+      expect(res.body.data.reviewerName).toBe('Admin Officer');
+    });
+
+    it('should reject without reason and fail with 400', async () => {
+      const res = await request(app)
+        .patch(`/api/v1/support/miscellaneous/${workflowReqId}/reject`)
+        .send({
+          reviewerName: 'Admin Officer',
+          rejectionReason: '',
+        });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should approve via /approve endpoint', async () => {
+      const res = await request(app)
+        .patch(`/api/v1/support/miscellaneous/${workflowReqId}/approve`)
+        .send({
+          reviewerName: 'Operations Director',
+          approvalRemarks: 'Budget approved for technician dispatch',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe('Approved');
+      expect(res.body.data.approvalRemarks).toBe('Budget approved for technician dispatch');
+    });
+
+    it('should process and fulfill via /process endpoint', async () => {
+      const res = await request(app)
+        .patch(`/api/v1/support/miscellaneous/${workflowReqId}/process`)
+        .send({
+          processedBy: 'Facilities Desk',
+          remarks: 'Technician dispatched and service completed',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe('Processed');
+      expect(res.body.data.processedBy).toBe('Facilities Desk');
+      expect(res.body.data.processedAt).toBeDefined();
+    });
+
+    it('should retrieve chronological audit history via /history endpoint', async () => {
+      const res = await request(app).get(`/api/v1/support/miscellaneous/${workflowReqId}/history`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThanOrEqual(4); // SUBMITTED, IN_REVIEW, APPROVED, PROCESSED
+
+      const actions = res.body.data.map((e: any) => e.action);
+      expect(actions).toContain('SUBMITTED');
+      expect(actions).toContain('IN_REVIEW');
+      expect(actions).toContain('APPROVED');
+      expect(actions).toContain('PROCESSED');
+    });
+  });
+
+  // ================= 8. DELETE REQUEST =================
   describe('DELETE /api/v1/support/miscellaneous/:id', () => {
     it('should delete request', async () => {
       const res = await request(app).delete(`/api/v1/support/miscellaneous/${createdReqId}`);

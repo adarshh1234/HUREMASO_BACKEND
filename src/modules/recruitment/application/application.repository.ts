@@ -6,6 +6,8 @@ import {
   ApplicationQueryParams,
   IStatusHistoryItem,
 } from './application.types';
+import { CandidateModel } from '../candidate/candidate.model';
+import { VacancyModel } from '../vacancy/vacancy.model';
 
 export class ApplicationRepository {
   async create(data: CreateApplicationDTO): Promise<IApplicationDocument> {
@@ -72,20 +74,50 @@ export class ApplicationRepository {
   async findAll(params: ApplicationQueryParams): Promise<{ items: IApplicationDocument[]; total: number }> {
     const query: any = {};
 
-    if (params.search) {
-      // Search is typically handled through candidate populated or stage/status
+    if (params.search && params.search.trim()) {
+      const s = params.search.trim();
+      const [candIds, vacIds] = await Promise.all([
+        CandidateModel.find({
+          $or: [
+            { name: { $regex: s, $options: 'i' } },
+            { firstName: { $regex: s, $options: 'i' } },
+            { lastName: { $regex: s, $options: 'i' } },
+            { email: { $regex: s, $options: 'i' } },
+          ],
+        }).select('_id').lean(),
+        VacancyModel.find({
+          $or: [
+            { title: { $regex: s, $options: 'i' } },
+            { jobTitle: { $regex: s, $options: 'i' } },
+            { department: { $regex: s, $options: 'i' } },
+          ],
+        }).select('_id').lean(),
+      ]);
+
       query.$or = [
-        { currentStage: { $regex: params.search, $options: 'i' } },
-        { notes: { $regex: params.search, $options: 'i' } },
+        { candidateId: { $in: candIds.map((c) => c._id) } },
+        { vacancyId: { $in: vacIds.map((v) => v._id) } },
+        { currentStage: { $regex: s, $options: 'i' } },
+        { status: { $regex: s, $options: 'i' } },
+        { notes: { $regex: s, $options: 'i' } },
       ];
     }
 
     if (params.status) {
-      query.status = params.status;
+      // support lenient status matching e.g. "Shot listed" -> "Shortlisted"
+      const st = params.status === 'Shot listed' ? 'Shortlisted' : params.status;
+      query.status = { $regex: `^${st}$`, $options: 'i' };
     }
 
     if (params.vacancyId) {
       query.vacancyId = params.vacancyId;
+    }
+
+    if ((params as any).department) {
+      const vacsInDept = await VacancyModel.find({
+        department: { $regex: (params as any).department, $options: 'i' },
+      }).select('_id').lean();
+      query.vacancyId = { $in: vacsInDept.map((v) => v._id) };
     }
 
     if (params.candidateId) {
@@ -98,6 +130,14 @@ export class ApplicationRepository {
 
     if (params.currentStage) {
       query.currentStage = { $regex: params.currentStage, $options: 'i' };
+    }
+
+    if ((params as any).fromDate || (params as any).dateRange) {
+      const fromStr = (params as any).fromDate || (params as any).dateRange;
+      const parsedDate = new Date(fromStr);
+      if (!isNaN(parsedDate.getTime())) {
+        query.appliedDate = { $gte: parsedDate };
+      }
     }
 
     const page = Math.max(1, Number(params.page) || 1);

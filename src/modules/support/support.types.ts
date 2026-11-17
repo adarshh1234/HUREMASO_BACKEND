@@ -11,7 +11,7 @@ export type TicketCategory =
 
 export type TicketPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
 
-export type TicketStatus = 'Open' | 'In Progress' | 'Pending' | 'Resolved' | 'Closed';
+export type TicketStatus = 'Open' | 'In Progress' | 'Pending' | 'Resolved' | 'Closed' | 'Reopened';
 
 export interface ITicketComment {
   id: string;
@@ -21,6 +21,22 @@ export interface ITicketComment {
   text: string;
   timestamp: string;
   isStaff?: boolean;
+}
+
+export interface ITicketInternalNote {
+  id: string;
+  author: string;
+  authorEmail?: string;
+  text: string;
+  timestamp: string;
+}
+
+export interface ITicketHistoryEntry {
+  id: string;
+  action: string;
+  performedBy: string;
+  timestamp: string;
+  details?: string;
 }
 
 export interface ISupportTicket {
@@ -34,16 +50,45 @@ export interface ISupportTicket {
   status: TicketStatus;
   description: string;
   assignedAgent?: string;
+  assignedAgentEmail?: string;
   resolutionDetails?: string;
   resolvedAt?: string;
   closedAt?: string;
+  reopenedAt?: string;
+  firstResponseAt?: string;
+  slaDueAt?: string;
+  linkedMaintenanceId?: string;
   comments: ITicketComment[];
+  internalNotes?: ITicketInternalNote[];
+  history?: ITicketHistoryEntry[];
   tags: string[];
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface ISupportTicketDocument extends ISupportTicket, Document {}
+
+// ================= SUPPORT AGENT =================
+
+export type SupportAgentStatus = 'Online' | 'Offline' | 'Busy' | 'On Leave';
+
+export interface ISupportAgent {
+  id?: string;
+  name: string;
+  role: string;
+  department: string;
+  email: string;
+  phone: string;
+  status: SupportAgentStatus;
+  specialties: string;
+  avatar?: string;
+  assignedTicketCount: number;
+  resolvedTicketCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ISupportAgentDocument extends Omit<ISupportAgent, 'id'>, Document {}
 
 // ================= MAINTENANCE REQUEST =================
 
@@ -79,6 +124,7 @@ export interface ISupportHelpArticle {
   tags: string[];
   viewCount: number;
   helpfulVotes: number;
+  unhelpfulVotes?: number;
   isPublished: boolean;
   author?: string;
   createdAt?: string;
@@ -113,24 +159,46 @@ export interface ISupportContactRequestDocument extends ISupportContactRequest, 
 // ================= MISCELLANEOUS REQUEST =================
 
 export type MiscRequestPriority = 'High' | 'Medium' | 'Low';
-export type MiscRequestStatus = 'Pending' | 'Approved' | 'Rejected';
+export type MiscRequestStatus = 'Pending' | 'In Review' | 'Approved' | 'Rejected' | 'Processed';
+
+export interface IMiscRequestAuditEntry {
+  id?: string;
+  action: 'SUBMITTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'PROCESSED' | 'UPDATED' | 'COMMENTED';
+  previousStatus?: string;
+  newStatus: string;
+  changedBy: string;
+  changedByRole?: string;
+  timestamp: string;
+  remarks?: string;
+}
 
 export interface IMiscellaneousRequest {
   id?: string;
   requestId: string;
+  employeeId?: string;
   employee: string;
   name?: string;
   department: string;
   dept?: string;
+  title?: string;
   requestType: string;
   type?: string;
   description: string;
   date: string;
+  requiredDate?: string;
+  attachments?: string[];
   priority: MiscRequestPriority;
   status: MiscRequestStatus;
   createdBy: string;
   email?: string;
   comments?: string;
+  reviewerId?: string;
+  reviewerName?: string;
+  approvalRemarks?: string;
+  rejectionReason?: string;
+  processedAt?: string;
+  processedBy?: string;
+  auditHistory?: IMiscRequestAuditEntry[];
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }
@@ -139,14 +207,18 @@ export interface IMiscellaneousRequestDocument extends Omit<IMiscellaneousReques
 
 export interface CreateMiscRequestDTO {
   requestId?: string;
+  employeeId?: string;
   employee?: string;
   name?: string;
   department?: string;
   dept?: string;
+  title?: string;
   requestType?: string;
   type?: string;
   description: string;
   date?: string;
+  requiredDate?: string;
+  attachments?: string[];
   priority?: MiscRequestPriority;
   status?: MiscRequestStatus;
   createdBy?: string;
@@ -154,7 +226,14 @@ export interface CreateMiscRequestDTO {
   comments?: string;
 }
 
-export interface UpdateMiscRequestDTO extends Partial<CreateMiscRequestDTO> {}
+export interface UpdateMiscRequestDTO extends Partial<CreateMiscRequestDTO> {
+  reviewerId?: string;
+  reviewerName?: string;
+  approvalRemarks?: string;
+  rejectionReason?: string;
+  processedAt?: string;
+  processedBy?: string;
+}
 
 export interface MiscRequestQueryFilter {
   status?: string;
@@ -175,8 +254,10 @@ export interface MiscRequestQueryFilter {
 export interface MiscRequestSummaryCounts {
   total: number;
   pending: number;
+  inReview: number;
   approved: number;
   rejected: number;
+  processed: number;
 }
 
 // ================= QUERY & DASHBOARD PARAMS =================
@@ -198,6 +279,8 @@ export interface ISupportDashboardMetrics {
   pendingTickets: number;
   resolvedTickets: number;
   closedTickets: number;
+  reopenedTickets: number;
+  unassignedTickets: number;
   totalTickets: number;
   averageResponseTimeHours: number;
   averageResolutionTimeHours: number;
@@ -213,6 +296,7 @@ export interface ISupportDashboardMetrics {
     category: string;
     priority: string;
     status: string;
+    assignedAgent?: string;
     lastUpdated: string;
   }>;
 }

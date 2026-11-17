@@ -83,7 +83,7 @@ export class JobPostingController {
   async getActiveLetGetIn(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await jobPostingService.getActiveLetGetInPostings(req.query as any);
-      res.status(200).json({ success: true, ...result });
+      res.status(200).json({ success: true, data: result.items, postings: result.items, items: result.items, total: result.total });
     } catch (err) {
       next(err);
     }

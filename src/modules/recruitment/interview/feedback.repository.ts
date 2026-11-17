@@ -31,11 +31,21 @@ export class FeedbackRepository {
     return FeedbackModel.findByIdAndDelete(id);
   }
 
-  async findAll(params: { candidateId?: string; interviewId?: string }): Promise<IFeedbackDocument[]> {
+  async findAll(params: { candidateId?: string; interviewId?: string; search?: string; status?: string; recommendation?: string }): Promise<IFeedbackDocument[]> {
     const query: any = {};
     if (params.candidateId) query.candidateId = params.candidateId;
     if (params.interviewId) query.interviewId = params.interviewId;
-    return FeedbackModel.find(query).populate(['interviewId', 'candidateId', 'interviewerEmployeeId']).sort({ submittedAt: -1 });
+    if (params.recommendation) query.recommendation = params.recommendation;
+    if (params.status) query.recommendation = params.status;
+    if (params.search && params.search.trim()) {
+      const s = params.search.trim();
+      query.$or = [
+        { candidateName: { $regex: s, $options: 'i' } },
+        { interviewerName: { $regex: s, $options: 'i' } },
+        { position: { $regex: s, $options: 'i' } },
+      ];
+    }
+    return FeedbackModel.find(query).populate(['interviewId', 'candidateId', 'interviewerEmployeeId']).sort({ submittedAt: -1, createdAt: -1 });
   }
 }
 

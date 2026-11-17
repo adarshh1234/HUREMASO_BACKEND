@@ -1,5 +1,15 @@
 import { tasksRepository, TasksRepository } from './tasks.repository';
-import { CreateTaskDTO, CreateTodoDTO, ITask, ITodo, TaskColumn, TaskQueryParams, TodoQueryParams } from './tasks.types';
+import {
+  CreateTaskDTO,
+  CreateTodoDTO,
+  ITask,
+  ITodo,
+  TaskColumn,
+  TaskQueryParams,
+  TodoQueryParams,
+  TaskCountsSummary,
+  TodoStatsSummary,
+} from './tasks.types';
 import { EmployeeModel } from '../employee/employee.model';
 
 export class TasksService {
@@ -9,7 +19,7 @@ export class TasksService {
     this.repository = tasksRepository;
   }
 
-  // --- KANBAN TASKS ---
+  // ================= KANBAN TASKS =================
   async getAllTasks(params: TaskQueryParams): Promise<{ items: ITask[]; total: number }> {
     await this.repository.seedDefaultTasksIfEmpty();
     const res = await this.repository.findAllTasks(params);
@@ -27,11 +37,13 @@ export class TasksService {
   async createTask(dto: CreateTaskDTO): Promise<ITask> {
     let assigneeName = dto.assigneeName;
     let assigneeId = dto.assigneeId;
+    let assigneeAvatar = dto.assigneeAvatar;
 
     if (assigneeId) {
       const emp = await EmployeeModel.findById(assigneeId);
       if (emp) {
         assigneeName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name;
+        assigneeAvatar = emp.avatar || assigneeAvatar;
       } else {
         assigneeId = undefined;
       }
@@ -41,18 +53,31 @@ export class TasksService {
       title: dto.title,
       type: dto.type || 'Operational',
       dueDate: dto.dueDate,
+      startDate: dto.startDate,
       column: dto.column || 'new-task',
       description: dto.description,
       priority: dto.priority || 'Medium',
       assigneeId: assigneeId as any,
       assigneeName,
+      assigneeAvatar,
+      createdBy: dto.createdBy || 'HR Operations',
     });
 
     return doc.toObject() as unknown as ITask;
   }
 
   async updateTask(id: string, dto: Partial<CreateTaskDTO>): Promise<ITask | null> {
-    const doc = await this.repository.updateTask(id, dto as any);
+    let updateData: any = { ...dto };
+
+    if (dto.assigneeId) {
+      const emp = await EmployeeModel.findById(dto.assigneeId);
+      if (emp) {
+        updateData.assigneeName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name;
+        updateData.assigneeAvatar = emp.avatar;
+      }
+    }
+
+    const doc = await this.repository.updateTask(id, updateData);
     return doc ? (doc.toObject() as unknown as ITask) : null;
   }
 
@@ -66,7 +91,12 @@ export class TasksService {
     return !!deleted;
   }
 
-  // --- TODOS ---
+  async getTaskCounts(): Promise<TaskCountsSummary> {
+    await this.repository.seedDefaultTasksIfEmpty();
+    return this.repository.getTaskCounts();
+  }
+
+  // ================= TODOS =================
   async getAllTodos(params: TodoQueryParams): Promise<{ items: ITodo[]; total: number }> {
     await this.repository.seedDefaultTodosIfEmpty();
     const res = await this.repository.findAllTodos(params);
@@ -96,6 +126,7 @@ export class TasksService {
       completed: dto.completed ?? false,
       dueDate: dto.dueDate || 'Today',
       priority: dto.priority || 'Normal',
+      description: dto.description,
       employeeId: employeeId as any,
     });
 
@@ -119,6 +150,11 @@ export class TasksService {
   async deleteTodo(id: string): Promise<boolean> {
     const deleted = await this.repository.deleteTodo(id);
     return !!deleted;
+  }
+
+  async getTodoStats(employeeId?: string): Promise<TodoStatsSummary> {
+    await this.repository.seedDefaultTodosIfEmpty();
+    return this.repository.getTodoStats(employeeId);
   }
 }
 

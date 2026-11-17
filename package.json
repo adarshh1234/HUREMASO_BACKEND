@@ -10,6 +10,11 @@
     "test": "jest --runInBand --detectOpenHandles",
     "lint": "tsc --noEmit"
   },
+  "config": {
+    "mongodbMemoryServer": {
+      "disablePostinstall": "1"
+    }
+  },
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",

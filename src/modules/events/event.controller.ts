@@ -4,12 +4,15 @@ import { sendResponse } from '../../common/utils/apiResponse';
 import {
   createEventSchema,
   updateEventSchema,
+  createTaskSchema,
+  updateTaskSchema,
   createSupportEventSchema,
   updateSupportEventSchema,
   createNewsletterSchema,
   updateNewsletterSchema,
   createBudgetSchema,
   updateBudgetSchema,
+  createExpenseSchema,
   queryEventSchema,
   mongoIdSchema,
 } from './event.validator';
@@ -90,6 +93,56 @@ export class EventController {
         res,
         statusCode: 200,
         message: 'Event deleted successfully',
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // Event Tasks
+  addTask = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const eventId = mongoIdSchema.parse(req.params.id);
+      const validated = createTaskSchema.parse(req.body);
+      const updated = await this.service.addTaskToEvent(eventId, validated);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Task added to event successfully',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateTask = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const eventId = mongoIdSchema.parse(req.params.id);
+      const taskId = req.params.taskId as string;
+      const validated = updateTaskSchema.parse(req.body);
+      const updated = await this.service.updateTaskInEvent(eventId, taskId, validated);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Task updated successfully',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  deleteTask = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const eventId = mongoIdSchema.parse(req.params.id);
+      const taskId = req.params.taskId as string;
+      const updated = await this.service.deleteTaskFromEvent(eventId, taskId);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Task deleted successfully',
+        data: updated,
       });
     } catch (err) {
       next(err);
@@ -214,6 +267,37 @@ export class EventController {
     }
   };
 
+  toggleLikeNewsletter = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const employeeId = (req.body?.employeeId as string) || 'Current Employee';
+      const updated = await this.service.toggleLikeNewsletter(id, employeeId);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Newsletter like status updated successfully',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  incrementReadsNewsletter = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const updated = await this.service.incrementReadsNewsletter(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Newsletter read counter incremented',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   // Budgets
   getAllBudgets = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -267,6 +351,22 @@ export class EventController {
         res,
         statusCode: 200,
         message: 'Event budget deleted successfully',
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  addExpense = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const budgetId = mongoIdSchema.parse(req.params.id);
+      const validated = createExpenseSchema.parse(req.body);
+      const item = await this.service.addExpenseToBudget(budgetId, validated);
+      sendResponse({
+        res,
+        statusCode: 201,
+        message: 'Expense added to event budget successfully',
+        data: item,
       });
     } catch (err) {
       next(err);

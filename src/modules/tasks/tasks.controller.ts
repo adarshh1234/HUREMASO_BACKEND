@@ -1,8 +1,14 @@
 import { Request, Response } from 'express';
 import { tasksService } from './tasks.service';
 
+function getStatusCode(error: any): number {
+  if (error.statusCode) return error.statusCode;
+  if (error.name === 'ValidationError' || error.name === 'CastError') return 400;
+  return 500;
+}
+
 export class TasksController {
-  // --- KANBAN TASKS ---
+  // ================= KANBAN TASKS =================
   async getAllTasks(req: Request, res: Response): Promise<void> {
     try {
       const result = await tasksService.getAllTasks(req.query);
@@ -14,7 +20,7 @@ export class TasksController {
         total: result.total,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to fetch tasks',
       });
@@ -37,7 +43,7 @@ export class TasksController {
         data: task,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to fetch task',
       });
@@ -53,7 +59,7 @@ export class TasksController {
         data: task,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to create task',
       });
@@ -77,7 +83,7 @@ export class TasksController {
         data: task,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to update task',
       });
@@ -102,7 +108,7 @@ export class TasksController {
         data: task,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to move task',
       });
@@ -125,14 +131,29 @@ export class TasksController {
         message: 'Task deleted successfully',
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to delete task',
       });
     }
   }
 
-  // --- TODOS ---
+  async getTaskCounts(req: Request, res: Response): Promise<void> {
+    try {
+      const counts = await tasksService.getTaskCounts();
+      res.status(200).json({
+        success: true,
+        data: counts,
+      });
+    } catch (error: any) {
+      res.status(getStatusCode(error)).json({
+        success: false,
+        message: error.message || 'Failed to fetch task counts',
+      });
+    }
+  }
+
+  // ================= TODOS =================
   async getAllTodos(req: Request, res: Response): Promise<void> {
     try {
       const result = await tasksService.getAllTodos(req.query);
@@ -144,7 +165,7 @@ export class TasksController {
         total: result.total,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to fetch todos',
       });
@@ -167,7 +188,7 @@ export class TasksController {
         data: todo,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to fetch todo',
       });
@@ -183,7 +204,7 @@ export class TasksController {
         data: todo,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to create todo',
       });
@@ -207,7 +228,7 @@ export class TasksController {
         data: todo,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to update todo',
       });
@@ -217,7 +238,7 @@ export class TasksController {
   async toggleTodo(req: Request, res: Response): Promise<void> {
     try {
       const id = req.params.id as string;
-      const { completed } = req.body;
+      const { completed } = req.body || {};
       const todo = await tasksService.toggleTodo(id, completed);
       if (!todo) {
         res.status(404).json({
@@ -232,7 +253,7 @@ export class TasksController {
         data: todo,
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to toggle todo status',
       });
@@ -255,9 +276,25 @@ export class TasksController {
         message: 'Todo item deleted successfully',
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(getStatusCode(error)).json({
         success: false,
         message: error.message || 'Failed to delete todo',
+      });
+    }
+  }
+
+  async getTodoStats(req: Request, res: Response): Promise<void> {
+    try {
+      const employeeId = req.query.employeeId as string | undefined;
+      const stats = await tasksService.getTodoStats(employeeId);
+      res.status(200).json({
+        success: true,
+        data: stats,
+      });
+    } catch (error: any) {
+      res.status(getStatusCode(error)).json({
+        success: false,
+        message: error.message || 'Failed to fetch todo statistics',
       });
     }
   }

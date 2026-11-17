@@ -6,14 +6,26 @@ const FeedbackSchema = new Schema<IFeedbackDocument>(
     interviewId: {
       type: Schema.Types.ObjectId,
       ref: 'Interview',
-      required: true,
+      required: false,
       index: true,
     },
     candidateId: {
       type: Schema.Types.ObjectId,
       ref: 'Candidate',
-      required: true,
+      required: false,
       index: true,
+    },
+    candidateName: {
+      type: String,
+      trim: true,
+    },
+    position: {
+      type: String,
+      trim: true,
+    },
+    interviewDate: {
+      type: String,
+      trim: true,
     },
     interviewerName: {
       type: String,

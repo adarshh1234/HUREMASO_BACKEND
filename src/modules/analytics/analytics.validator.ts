@@ -37,6 +37,20 @@ export const employeeOfPeriodQuerySchema = z.object({
     .transform((val) => (val ? parseInt(val, 10) : new Date().getFullYear())),
 });
 
+export const approveWinnerSchema = z.object({
+  periodType: z.enum(['week', 'month', 'year']),
+  periodLabel: z.string().min(1, 'Period label is required'),
+  employeeId: z.string().min(1, 'Employee ID is required'),
+  remarks: z.string().optional(),
+  approvedBy: z.string().optional(),
+});
+
+export const exportQuerySchema = reportQuerySchema.extend({
+  format: z.enum(['csv', 'pdf', 'excel', 'xlsx']).optional().default('csv'),
+});
+
 export type ReportQueryInput = z.infer<typeof reportQuerySchema>;
 export type AnalyticsQueryInput = z.infer<typeof analyticsQuerySchema>;
 export type EmployeeOfPeriodQueryInput = z.infer<typeof employeeOfPeriodQuerySchema>;
+export type ApproveWinnerInput = z.infer<typeof approveWinnerSchema>;
+export type ExportQueryInput = z.infer<typeof exportQuerySchema>;

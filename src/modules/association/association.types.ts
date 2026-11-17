@@ -48,12 +48,21 @@ export interface IAssociation {
   dateRequested: string;
   effectiveDate?: string;
   expiryDate?: string;
+  durationMonths?: number;
+  attachments?: string[];
   notes?: string;
   isExisting: boolean;
   approvalDetails?: IAssociationApproval;
   history: IAssociationAuditLog[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface IRenewAssociationInput {
+  durationMonths?: number;
+  expiryDate?: string;
+  notes?: string;
+  performedBy?: string;
 }
 
 export interface IAssociationDocument extends IAssociation, Document {}

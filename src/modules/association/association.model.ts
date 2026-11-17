@@ -97,6 +97,14 @@ const associationSchema = new Schema<IAssociationDocument>(
       type: String,
       default: '',
     },
+    durationMonths: {
+      type: Number,
+      default: 6,
+    },
+    attachments: {
+      type: [String],
+      default: [],
+    },
     notes: {
       type: String,
       default: '',

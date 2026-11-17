@@ -18,22 +18,40 @@ export const createEventSchema = z.object({
   organizerId: z.string().optional(),
   attendees: z.array(z.string()).optional(),
   attendeeCount: z.number().optional(),
-  status: z.enum(['Draft', 'Planing', 'In Progress', 'Up coming', 'Completed', 'Cancelled']).default('Up coming'),
+  status: z
+    .enum([
+      'Draft',
+      'Planing',
+      'Planning',
+      'In Progress',
+      'Up coming',
+      'Upcoming',
+      'Completed',
+      'Cancelled',
+    ])
+    .default('Upcoming'),
   progress: z.string().optional(),
-  tasks: z.array(
-    z.object({
-      name: z.string(),
-      due: z.string(),
-      assignee: z.string(),
-      status: z.enum(['In Progress', 'Pending', 'Not Started', 'Completed']).default('In Progress'),
-      progress: z.number().optional(),
+  tasks: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        name: z.string(),
+        due: z.string(),
+        dueDate: z.string().optional(),
+        assignee: z.string(),
+        status: z.enum(['In Progress', 'Pending', 'Not Started', 'Completed']).default('In Progress'),
+        priority: z.enum(['Low', 'Medium', 'High']).optional(),
+        progress: z.number().optional(),
+      })
+    )
+    .optional(),
+  budget: z
+    .object({
+      allocated: z.number().default(0),
+      spent: z.number().default(0),
+      status: z.enum(['Approved', 'Pending Review', 'Over Budget', 'Rejected']).default('Approved'),
     })
-  ).optional(),
-  budget: z.object({
-    allocated: z.number().default(0),
-    spent: z.number().default(0),
-    status: z.enum(['Approved', 'Pending Review', 'Over Budget']).default('Approved'),
-  }).optional(),
+    .optional(),
   sendReminder: z.boolean().default(true),
   syncCalendar: z.boolean().default(true),
   emailNotifications: z.boolean().default(true),
@@ -41,33 +59,70 @@ export const createEventSchema = z.object({
 
 export const updateEventSchema = createEventSchema.partial();
 
+export const createTaskSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, 'Task name is required'),
+  due: z.string().min(1, 'Due date is required'),
+  dueDate: z.string().optional(),
+  assignee: z.string().default('Sarah Jo'),
+  status: z.enum(['In Progress', 'Pending', 'Not Started', 'Completed']).default('In Progress'),
+  priority: z.enum(['Low', 'Medium', 'High']).default('Medium'),
+  progress: z.number().optional(),
+});
+
+export const updateTaskSchema = createTaskSchema.partial();
+
 export const createSupportEventSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().min(1, 'Description is required'),
   author: z.string().default('Sarah Jo'),
-  status: z.enum(['Open', 'Pending', 'Resolved', 'Closed']).default('Open'),
+  requesterEmail: z.string().optional(),
+  department: z.string().optional(),
+  category: z.string().default('General'),
+  priority: z.enum(['Low', 'Medium', 'High', 'Urgent']).default('Medium'),
+  assignedAgent: z.string().optional(),
+  status: z.enum(['Open', 'In Progress', 'Pending', 'Resolved', 'Closed']).default('Open'),
   timeAgo: z.string().optional(),
   replaysCount: z.number().default(0),
 });
 
 export const updateSupportEventSchema = createSupportEventSchema.partial().extend({
-  reply: z.object({
-    author: z.string(),
-    text: z.string(),
-  }).optional(),
+  reply: z
+    .object({
+      id: z.string().optional(),
+      author: z.string(),
+      text: z.string(),
+      date: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const createNewsletterSchema = z.object({
   title: z.string().min(1, 'Newsletter title is required'),
   category: z.string().default('Company Events'),
   publishDate: z.string().default('Today'),
+  scheduleDate: z.string().optional(),
   author: z.string().default('HR Communications Team'),
   status: z.enum(['Published', 'Draft', 'Scheduled']).default('Published'),
   summary: z.string().min(1, 'Summary is required'),
   content: z.string().optional(),
+  reads: z.number().optional(),
+  likes: z.number().optional(),
+  likedBy: z.array(z.string()).optional(),
 });
 
 export const updateNewsletterSchema = createNewsletterSchema.partial();
+
+export const createExpenseSchema = z.object({
+  id: z.string().optional(),
+  description: z.string().min(1, 'Expense description is required'),
+  category: z.string().default('Venue & Catering'),
+  amount: z.number().min(0, 'Amount must be a positive number'),
+  date: z.string().optional(),
+  vendor: z.string().optional(),
+  recordedBy: z.string().optional(),
+  approvalStatus: z.enum(['Approved', 'Pending Review', 'Rejected']).default('Approved'),
+});
 
 export const createBudgetSchema = z.object({
   eventName: z.string().min(1, 'Event name is required'),
@@ -75,8 +130,9 @@ export const createBudgetSchema = z.object({
   category: z.string().default('Venue & Catering'),
   allocated: z.number().min(0, 'Allocated budget must be non-negative'),
   spent: z.number().default(0),
-  status: z.enum(['Approved', 'Pending Review', 'Over Budget']).default('Pending Review'),
+  status: z.enum(['Approved', 'Pending Review', 'Over Budget', 'Rejected']).default('Pending Review'),
   owner: z.string().default('Sarah Joseph'),
+  expenses: z.array(createExpenseSchema).optional(),
 });
 
 export const updateBudgetSchema = createBudgetSchema.partial();
@@ -87,6 +143,7 @@ export const queryEventSchema = z.object({
   search: z.string().optional(),
   status: z.string().optional(),
   eventType: z.string().optional(),
+  category: z.string().optional(),
   department: z.string().optional(),
   month: z.string().optional(),
   year: z.string().optional(),

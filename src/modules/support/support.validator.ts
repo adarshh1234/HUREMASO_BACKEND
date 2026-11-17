@@ -17,13 +17,20 @@ export const createTicketSchema = z.object({
 });
 
 export const updateTicketSchema = createTicketSchema.partial().extend({
-  status: z.enum(['Open', 'In Progress', 'Pending', 'Resolved', 'Closed']).optional(),
+  status: z.enum(['Open', 'In Progress', 'Pending', 'Resolved', 'Closed', 'Reopened']).optional(),
   resolutionDetails: z.string().optional(),
 });
 
 export const updateTicketStatusSchema = z.object({
-  status: z.enum(['Open', 'In Progress', 'Pending', 'Resolved', 'Closed']),
+  status: z.enum(['Open', 'In Progress', 'Pending', 'Resolved', 'Closed', 'Reopened']),
   resolutionDetails: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const assignTicketSchema = z.object({
+  assignedAgent: z.string().min(1, 'Agent name is required'),
+  assignedAgentEmail: z.string().email().optional(),
+  assignedBy: z.string().optional(),
 });
 
 export const addTicketCommentSchema = z.object({
@@ -32,6 +39,27 @@ export const addTicketCommentSchema = z.object({
   role: z.string().optional().default('Requester'),
   text: z.string().min(1, 'Comment text is required'),
   isStaff: z.boolean().optional().default(false),
+});
+
+export const addInternalNoteSchema = z.object({
+  author: z.string().min(1, 'Author is required'),
+  authorEmail: z.string().email().optional(),
+  text: z.string().min(1, 'Note text is required'),
+});
+
+export const voteHelpArticleSchema = z.object({
+  isHelpful: z.boolean().optional().default(true),
+});
+
+export const createAgentSchema = z.object({
+  name: z.string().min(1, 'Agent name is required'),
+  role: z.string().min(1, 'Role is required'),
+  department: z.string().optional().default('IT Operations'),
+  email: z.string().email('Valid email is required'),
+  phone: z.string().optional().default(''),
+  status: z.enum(['Online', 'Offline', 'Busy', 'On Leave']).optional().default('Online'),
+  specialties: z.string().optional().default(''),
+  avatar: z.string().optional().default(''),
 });
 
 // ================= MAINTENANCE VALIDATORS =================
@@ -96,16 +124,20 @@ export const updateContactRequestStatusSchema = z.object({
 
 export const createMiscRequestSchema = z.object({
   requestId: z.string().optional(),
+  employeeId: z.string().optional(),
   employee: z.string().optional(),
   name: z.string().optional(),
   department: z.string().optional(),
   dept: z.string().optional(),
+  title: z.string().optional(),
   requestType: z.string().optional(),
   type: z.string().optional(),
   description: z.string().min(1, 'Description is required'),
   date: z.string().optional(),
+  requiredDate: z.string().optional(),
+  attachments: z.array(z.string()).optional(),
   priority: z.enum(['High', 'Medium', 'Low']).optional().default('Medium'),
-  status: z.enum(['Pending', 'Approved', 'Rejected']).optional().default('Pending'),
+  status: z.enum(['Pending', 'In Review', 'Approved', 'Rejected', 'Processed']).optional().default('Pending'),
   createdBy: z.string().optional().default('Employee'),
   email: z.string().email().optional().or(z.literal('')),
   comments: z.string().optional(),
@@ -116,24 +148,65 @@ export const createMiscRequestSchema = z.object({
 
 export const updateMiscRequestSchema = z.object({
   requestId: z.string().optional(),
+  employeeId: z.string().optional(),
   employee: z.string().optional(),
   name: z.string().optional(),
   department: z.string().optional(),
   dept: z.string().optional(),
+  title: z.string().optional(),
   requestType: z.string().optional(),
   type: z.string().optional(),
   description: z.string().optional(),
   date: z.string().optional(),
+  requiredDate: z.string().optional(),
+  attachments: z.array(z.string()).optional(),
   priority: z.enum(['High', 'Medium', 'Low']).optional(),
-  status: z.enum(['Pending', 'Approved', 'Rejected']).optional(),
+  status: z.enum(['Pending', 'In Review', 'Approved', 'Rejected', 'Processed']).optional(),
   createdBy: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
   comments: z.string().optional(),
+  reviewerId: z.string().optional(),
+  reviewerName: z.string().optional(),
+  approvalRemarks: z.string().optional(),
+  rejectionReason: z.string().optional(),
+  processedAt: z.string().optional(),
+  processedBy: z.string().optional(),
 });
 
 export const updateMiscRequestStatusSchema = z.object({
-  status: z.enum(['Pending', 'Approved', 'Rejected']),
+  status: z.enum(['Pending', 'In Review', 'Approved', 'Rejected', 'Processed']),
   comments: z.string().optional(),
+  remarks: z.string().optional(),
+  reviewerName: z.string().optional(),
+  reviewerId: z.string().optional(),
+  approvalRemarks: z.string().optional(),
+  rejectionReason: z.string().optional(),
+  processedBy: z.string().optional(),
+});
+
+export const startReviewSchema = z.object({
+  reviewerName: z.string().optional(),
+  reviewerId: z.string().optional(),
+  remarks: z.string().optional(),
+});
+
+export const approveMiscRequestSchema = z.object({
+  reviewerName: z.string().optional(),
+  reviewerId: z.string().optional(),
+  approvalRemarks: z.string().optional(),
+  comments: z.string().optional(),
+});
+
+export const rejectMiscRequestSchema = z.object({
+  reviewerName: z.string().optional(),
+  reviewerId: z.string().optional(),
+  rejectionReason: z.string().min(1, 'Rejection reason is required'),
+  comments: z.string().optional(),
+});
+
+export const processMiscRequestSchema = z.object({
+  processedBy: z.string().optional(),
+  remarks: z.string().optional(),
 });
 
 export const miscRequestQueryFilterSchema = z.object({
