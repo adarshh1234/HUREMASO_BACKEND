@@ -1,4 +1,4 @@
-import { FilterQuery } from 'mongoose';
+import mongoose, { FilterQuery } from 'mongoose';
 import { EmployeeModel } from '../employee/employee.model';
 import { IEmployee } from '../employee/employee.types';
 import { AttendanceModel } from '../time/attendance/attendance.model';
@@ -15,6 +15,14 @@ import { EmployeeRequestModel } from '../employee/requests/request.model';
 import { TaskModel } from '../tasks/tasks.model';
 import { NotificationModel } from '../notification/notification.model';
 import { CompanyEventModel, EventsNewsletterModel } from '../events/event.model';
+import { attendanceService } from '../time/attendance/attendance.service';
+import { BuzzPostModel } from './buzz/buzzPost.model';
+import {
+  ClockInInput,
+  ClockOutInput,
+  CreateBuzzPostInput,
+  UpdateBuzzPostInput,
+} from './dashboard.validator';
 import {
   IDashboardFilter,
   IDashboardOverviewResponse,
@@ -93,7 +101,15 @@ export class DashboardService {
       date: { $in: weekDatesStr },
     };
     if (filter?.employeeId) {
-      attendanceQuery.employeeId = filter.employeeId;
+      const isOid = mongoose.isValidObjectId(filter.employeeId);
+      if (isOid) {
+        attendanceQuery.employeeId = filter.employeeId;
+      } else {
+        const emp = await EmployeeModel.findOne({ employeeId: filter.employeeId }).lean().exec();
+        if (emp) {
+          attendanceQuery.employeeId = (emp as any)._id;
+        }
+      }
     }
 
     const attendances = await AttendanceModel.find(attendanceQuery).lean().exec();
@@ -142,6 +158,29 @@ export class DashboardService {
       punchedAt = `Today at ${today.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (GMT)`;
     }
 
+    // Determine current employee identity
+    let employeeName = 'Sarah Joseph';
+    let employeeAvatar = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80';
+
+    if (filter?.employeeId) {
+      const isOid = mongoose.isValidObjectId(filter.employeeId);
+      const emp = await EmployeeModel.findOne(
+        isOid
+          ? { $or: [{ _id: filter.employeeId }, { employeeId: filter.employeeId }] }
+          : { employeeId: filter.employeeId }
+      ).lean().exec();
+      if (emp) {
+        employeeName = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || employeeName;
+        if ((emp as any).profileImage) employeeAvatar = (emp as any).profileImage;
+      }
+    } else {
+      const firstEmp = await EmployeeModel.findOne({ isTerminated: false }).lean().exec();
+      if (firstEmp) {
+        employeeName = firstEmp.name || `${firstEmp.firstName || ''} ${firstEmp.lastName || ''}`.trim() || employeeName;
+        if ((firstEmp as any).profileImage) employeeAvatar = (firstEmp as any).profileImage;
+      }
+    }
+
     return {
       punchedIn,
       punchedAt,
@@ -150,7 +189,49 @@ export class DashboardService {
       todayFormattedTime,
       weekRangeLabel,
       weeklyHours,
+      employeeName,
+      employeeAvatar,
     };
+  }
+
+  async clockIn(dto: ClockInInput): Promise<ITimeAtWorkMetric> {
+    let resolvedEmployeeId = dto.employeeId;
+    if (dto.employeeId) {
+      const isOid = mongoose.isValidObjectId(dto.employeeId);
+      const emp = await EmployeeModel.findOne(
+        isOid
+          ? { $or: [{ _id: dto.employeeId }, { employeeId: dto.employeeId }] }
+          : { employeeId: dto.employeeId }
+      ).exec();
+      if (emp) {
+        resolvedEmployeeId = emp._id.toString();
+      }
+    }
+    await attendanceService.punchIn({
+      ...dto,
+      employeeId: resolvedEmployeeId,
+    });
+    return this.getTimeAtWork({ employeeId: resolvedEmployeeId });
+  }
+
+  async clockOut(dto: ClockOutInput): Promise<ITimeAtWorkMetric> {
+    let resolvedEmployeeId = dto.employeeId;
+    if (dto.employeeId) {
+      const isOid = mongoose.isValidObjectId(dto.employeeId);
+      const emp = await EmployeeModel.findOne(
+        isOid
+          ? { $or: [{ _id: dto.employeeId }, { employeeId: dto.employeeId }] }
+          : { employeeId: dto.employeeId }
+      ).exec();
+      if (emp) {
+        resolvedEmployeeId = emp._id.toString();
+      }
+    }
+    await attendanceService.punchOut({
+      ...dto,
+      employeeId: resolvedEmployeeId,
+    });
+    return this.getTimeAtWork({ employeeId: resolvedEmployeeId });
   }
 
   // ================= 2. WORKFORCE METRICS =================
@@ -530,13 +611,29 @@ export class DashboardService {
 
   // ================= 8. BUZZ POSTS & ANNOUNCEMENTS =================
   async getBuzzPosts(limit = 10): Promise<IBuzzPost[]> {
-    const [events, notifications, newsletters] = await Promise.all([
+    const [userPosts, events, notifications, newsletters] = await Promise.all([
+      BuzzPostModel.find().sort({ createdAt: -1 }).limit(limit).lean().exec(),
       CompanyEventModel.find().sort({ createdAt: -1 }).limit(limit).lean().exec(),
       NotificationModel.find({ status: { $ne: 'DRAFT' } }).sort({ createdAt: -1 }).limit(limit).lean().exec(),
       EventsNewsletterModel.find().sort({ createdAt: -1 }).limit(limit).lean().exec(),
     ]);
 
     const buzzList: IBuzzPost[] = [];
+
+    // Map user/community buzz posts
+    userPosts.forEach((post) => {
+      const createdDate = (post as any).createdAt ? new Date((post as any).createdAt) : new Date();
+      buzzList.push({
+        id: (post as any)._id?.toString(),
+        author: post.author,
+        avatar: post.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
+        date: createdDate.toISOString(),
+        formattedDate: `${createdDate.toISOString().split('T')[0]} ${createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+        content: post.content,
+        type: post.type || 'post',
+        title: post.title,
+      });
+    });
 
     // Map company events / announcements
     events.forEach((ev) => {
@@ -586,7 +683,7 @@ export class DashboardService {
     // Sort all buzz items by date descending
     buzzList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    // Default sample buzz posts if database has none
+    // If no buzz posts in DB at all, seed initial sample posts
     if (buzzList.length === 0) {
       const now = new Date();
       return [
@@ -596,7 +693,7 @@ export class DashboardService {
           avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
           date: now.toISOString(),
           formattedDate: `${now.toISOString().split('T')[0]} 10:26 AM`,
-          content: 'Hello, welcome to the new HR portal dashboard!',
+          content: 'Hello. I am Alexa',
           type: 'post',
           title: 'Welcome Note',
         },
@@ -604,6 +701,65 @@ export class DashboardService {
     }
 
     return buzzList.slice(0, limit);
+  }
+
+  async createBuzzPost(data: CreateBuzzPostInput): Promise<IBuzzPost> {
+    const post = new BuzzPostModel({
+      author: data.author,
+      authorId: data.authorId,
+      avatar: data.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
+      title: data.title,
+      content: data.content,
+      type: data.type || 'post',
+    });
+    const saved = await post.save();
+    const d = saved.createdAt || new Date();
+    return {
+      id: saved._id.toString(),
+      author: saved.author,
+      avatar: saved.avatar,
+      date: d.toISOString(),
+      formattedDate: `${d.toISOString().split('T')[0]} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      content: saved.content,
+      type: saved.type || 'post',
+      title: saved.title,
+    };
+  }
+
+  async updateBuzzPost(id: string, data: UpdateBuzzPostInput): Promise<IBuzzPost | null> {
+    const updated = await BuzzPostModel.findByIdAndUpdate(id, { $set: data }, { new: true }).lean().exec();
+    if (!updated) return null;
+    const d = (updated as any).createdAt || new Date();
+    return {
+      id: updated._id.toString(),
+      author: updated.author,
+      avatar: updated.avatar,
+      date: d.toISOString(),
+      formattedDate: `${d.toISOString().split('T')[0]} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      content: updated.content,
+      type: updated.type || 'post',
+      title: updated.title,
+    };
+  }
+
+  async deleteBuzzPost(id: string): Promise<boolean> {
+    const res = await BuzzPostModel.findByIdAndDelete(id).exec();
+    return !!res;
+  }
+
+  async getSubUnitDistribution(filter?: IDashboardFilter): Promise<IDistributionItem[]> {
+    const workforce = await this.getWorkforceMetrics(filter);
+    return workforce.subUnitDistribution;
+  }
+
+  async getLocationDistribution(filter?: IDashboardFilter): Promise<IDistributionItem[]> {
+    const workforce = await this.getWorkforceMetrics(filter);
+    return workforce.locationDistribution;
+  }
+
+  async getEmployeesOnLeave(filter?: IDashboardFilter): Promise<IEmployeeOnLeaveItem[]> {
+    const att = await this.getAttendanceLeaveMetrics(filter);
+    return att.employeesOnLeaveToday;
   }
 
   // ================= 9. RECENT ACTIVITY FEED =================

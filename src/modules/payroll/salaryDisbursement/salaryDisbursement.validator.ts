@@ -2,6 +2,24 @@ import { z } from 'zod';
 
 export const mongoIdSchema = z.string().min(1, 'ID is required');
 
+export const disbursementMethodEnum = z.enum([
+  'Bank Transfer',
+  'Cash',
+  'Cheque',
+  'Stripe',
+  'PayPal',
+]);
+
+export const disbursementStatusEnum = z.enum([
+  'Draft',
+  'Pending',
+  'Approved',
+  'Processing',
+  'Paid',
+  'Failed',
+  'Cancelled',
+]);
+
 export const createSalaryDisbursementSchema = z.object({
   employeeName: z.string().min(1, 'Employee name is required'),
   employeeId: z.string().optional(),
@@ -9,11 +27,18 @@ export const createSalaryDisbursementSchema = z.object({
   period: z.string().min(1, 'Period is required'),
   grossAmount: z.number().positive('Gross amount must be positive'),
   deductions: z.number().min(0, 'Deductions cannot be negative').optional().default(0),
-  method: z.enum(['Bank Transfer', 'Cash', 'Cheque']).optional().default('Bank Transfer'),
+  netAmount: z.number().min(0).optional(),
+  method: disbursementMethodEnum.optional().default('Bank Transfer'),
+  status: disbursementStatusEnum.optional().default('Pending'),
+  remarks: z.string().optional(),
+  transactionRef: z.string().optional(),
 });
 
 export const updateSalaryDisbursementStatusSchema = z.object({
-  status: z.enum(['Paid', 'Pending', 'Failed', 'Processing']),
+  status: disbursementStatusEnum,
+  remarks: z.string().optional(),
+  transactionRef: z.string().optional(),
+  approvedBy: z.string().optional(),
 });
 
 export const querySalaryDisbursementSchema = z.object({

@@ -1,4 +1,4 @@
-import { Schema, model } from 'mongoose';
+import mongoose, { Schema, model } from 'mongoose';
 import { IFinanceRequestDocument } from '../payroll.types';
 
 const financeRequestSchema = new Schema<IFinanceRequestDocument>(
@@ -10,9 +10,10 @@ const financeRequestSchema = new Schema<IFinanceRequestDocument>(
     department: { type: String, required: true, default: 'Operations' },
     amount: { type: Number, required: true, min: 0 },
     description: { type: String },
+    supportingDoc: { type: String },
     status: {
       type: String,
-      enum: ['Pending', 'Approved', 'Rejected'],
+      enum: ['Pending', 'Approved', 'Rejected', 'Processing', 'Completed'],
       default: 'Pending',
       index: true,
     },
@@ -20,11 +21,24 @@ const financeRequestSchema = new Schema<IFinanceRequestDocument>(
       type: String,
       default: () => new Date().toISOString().split('T')[0],
     },
+    approvalRemarks: { type: String },
+    approvedBy: { type: String },
+    approvedAt: { type: String },
+    history: [
+      {
+        status: { type: String, required: true },
+        changedBy: { type: String, required: true },
+        timestamp: { type: String, required: true },
+        remarks: { type: String },
+      },
+    ],
     notes: { type: String },
   },
   { timestamps: true }
 );
 
-financeRequestSchema.index({ status: 1, department: 1 });
+financeRequestSchema.index({ status: 1, department: 1, requestType: 1 });
 
-export const FinanceRequestModel = model<IFinanceRequestDocument>('FinanceRequest', financeRequestSchema);
+export const FinanceRequestModel =
+  (mongoose.models.FinanceRequest as mongoose.Model<IFinanceRequestDocument>) ||
+  model<IFinanceRequestDocument>('FinanceRequest', financeRequestSchema);

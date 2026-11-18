@@ -9,12 +9,15 @@ export const createFinanceRequestSchema = z.object({
   department: z.string().min(1, 'Department is required'),
   amount: z.number().positive('Amount must be positive'),
   description: z.string().optional(),
+  supportingDoc: z.string().optional(),
   notes: z.string().optional(),
 });
 
 export const updateFinanceRequestStatusSchema = z.object({
-  status: z.enum(['Pending', 'Approved', 'Rejected']),
+  status: z.enum(['Pending', 'Approved', 'Rejected', 'Processing', 'Completed']),
+  remarks: z.string().optional(),
   notes: z.string().optional(),
+  approvedBy: z.string().optional(),
 });
 
 export const queryFinanceRequestSchema = z.object({
@@ -23,6 +26,7 @@ export const queryFinanceRequestSchema = z.object({
   search: z.string().optional(),
   status: z.string().optional(),
   department: z.string().optional(),
+  requestType: z.string().optional(),
   sortBy: z.string().optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
 });

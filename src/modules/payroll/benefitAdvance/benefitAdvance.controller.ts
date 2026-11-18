@@ -1,12 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import { benefitAdvanceService, BenefitAdvanceService } from './benefitAdvance.service';
-import { sendResponse } from '../../../common/utils/apiResponse';
 import {
   createBenefitAdvanceSchema,
   updateBenefitAdvanceStatusSchema,
   queryBenefitAdvanceSchema,
   mongoIdSchema,
+  createBenefitSchemeSchema,
+  updateBenefitSchemeSchema,
 } from './benefitAdvance.validator';
+import { sendResponse } from '../../../common/utils/apiResponse';
 
 export class BenefitAdvanceController {
   constructor(private service: BenefitAdvanceService = benefitAdvanceService) {}
@@ -34,11 +36,7 @@ export class BenefitAdvanceController {
     try {
       const id = mongoIdSchema.parse(req.params.id);
       const item = await this.service.getById(id);
-      sendResponse({
-        res,
-        statusCode: 200,
-        data: item,
-      });
+      sendResponse({ res, statusCode: 200, data: item });
     } catch (err) {
       next(err);
     }
@@ -51,7 +49,7 @@ export class BenefitAdvanceController {
       sendResponse({
         res,
         statusCode: 201,
-        message: 'Benefit advance created successfully',
+        message: 'Benefit advance request submitted successfully',
         data: item,
       });
     } catch (err) {
@@ -62,12 +60,12 @@ export class BenefitAdvanceController {
   updateStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = mongoIdSchema.parse(req.params.id);
-      const { status, notes } = updateBenefitAdvanceStatusSchema.parse(req.body);
-      const item = await this.service.updateStatus(id, status, notes);
+      const { status, remarks, notes, approvedBy } = updateBenefitAdvanceStatusSchema.parse(req.body);
+      const item = await this.service.updateStatus(id, status, remarks || notes, approvedBy);
       sendResponse({
         res,
         statusCode: 200,
-        message: 'Status updated successfully',
+        message: `Benefit advance status updated to ${status}`,
         data: item,
       });
     } catch (err) {
@@ -82,7 +80,50 @@ export class BenefitAdvanceController {
       sendResponse({
         res,
         statusCode: 200,
-        message: 'Benefit advance deleted successfully',
+        message: 'Benefit advance record deleted successfully',
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Schemes ───────────────────────────────────────────────────────────────
+  getSchemes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const category = req.query.category as string | undefined;
+      const tab = req.query.tab as string | undefined;
+      const schemes = await this.service.getSchemes(category, tab);
+      sendResponse({ res, statusCode: 200, data: schemes });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  createScheme = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const validated = createBenefitSchemeSchema.parse(req.body);
+      const scheme = await this.service.createScheme(validated);
+      sendResponse({
+        res,
+        statusCode: 201,
+        message: 'Benefit scheme created successfully',
+        data: scheme,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateScheme = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const validated = updateBenefitSchemeSchema.parse(req.body);
+      const scheme = await this.service.updateScheme(id, validated);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Benefit scheme updated successfully',
+        data: scheme,
       });
     } catch (err) {
       next(err);

@@ -19,5 +19,6 @@ router.patch('/:id/buddy-manager', onboardingCandidateController.updateBuddyMana
 router.patch('/:id/training', onboardingCandidateController.updateTraining);
 router.patch('/:id/visa', onboardingCandidateController.updateVisa);
 router.patch('/:id/insurance', onboardingCandidateController.updateInsurance);
+router.post('/:id/convert-to-employee', onboardingCandidateController.convertToEmployee);
 
 export default router;

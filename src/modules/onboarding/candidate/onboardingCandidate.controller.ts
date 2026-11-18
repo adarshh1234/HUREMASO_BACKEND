@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { onboardingCandidateService, OnboardingCandidateService } from './onboardingCandidate.service';
+import { IOnboardingCandidateDocument } from '../onboarding.types';
 import { sendResponse } from '../../../common/utils/apiResponse';
 import {
   createOnboardingCandidateSchema,
@@ -71,7 +72,7 @@ export class OnboardingCandidateController {
     try {
       const id = mongoIdSchema.parse(req.params.id);
       const validated = updateOnboardingCandidateSchema.parse(req.body);
-      const item = await this.service.update(id, validated as any);
+      const item = await this.service.update(id, validated as Partial<IOnboardingCandidateDocument>);
       sendResponse({
         res,
         statusCode: 200,
@@ -119,7 +120,7 @@ export class OnboardingCandidateController {
     try {
       const id = mongoIdSchema.parse(req.params.id);
       const { docType, status, signedDate, docUrl } = updateDocumentSchema.parse(req.body);
-      const item = await this.service.updateDocument(id, docType as any, status, signedDate, docUrl);
+      const item = await this.service.updateDocument(id, docType, status, signedDate, docUrl);
       sendResponse({
         res,
         statusCode: 200,
@@ -219,6 +220,21 @@ export class OnboardingCandidateController {
         res,
         statusCode: 200,
         message: 'Onboarding candidate deleted successfully',
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  convertToEmployee = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const result = await this.service.convertToEmployee(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Candidate converted to employee successfully',
+        data: result,
       });
     } catch (err) {
       next(err);

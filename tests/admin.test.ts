@@ -338,6 +338,56 @@ describe('Admin Module Backend API Integration Tests', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.localization.language).toBe('en_CA');
     });
+
+    it('should validate and send test email via /configuration/test-email', async () => {
+      const res = await request(app)
+        .post('/api/v1/admin/configuration/test-email')
+        .send({
+          sendAsEmail: 'admin@huremaso.org',
+          mailSentEngine: 'SMTP',
+          smtpHost: 'mail.huremaso.org',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toContain('admin@huremaso.org');
+    });
+
+    it('should reject invalid email for test email endpoint', async () => {
+      const res = await request(app)
+        .post('/api/v1/admin/configuration/test-email')
+        .send({
+          sendAsEmail: 'invalid-email-address',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should validate and test LDAP connection via /configuration/test-ldap', async () => {
+      const res = await request(app)
+        .post('/api/v1/admin/configuration/test-ldap')
+        .send({
+          serverUrl: 'ldap.example.com',
+          port: 389,
+          bindDn: 'cn=admin,dc=example,dc=com',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.connected).toBe(true);
+    });
+
+    it('should reject invalid serverUrl for test LDAP endpoint', async () => {
+      const res = await request(app)
+        .post('/api/v1/admin/configuration/test-ldap')
+        .send({
+          serverUrl: '',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
   });
 
   // 8. JOB SUBMODULES TESTS

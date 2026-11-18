@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { salaryDisbursementService, SalaryDisbursementService } from './salaryDisbursement.service';
-import { sendResponse } from '../../../common/utils/apiResponse';
 import {
   createSalaryDisbursementSchema,
   updateSalaryDisbursementStatusSchema,
   querySalaryDisbursementSchema,
   mongoIdSchema,
 } from './salaryDisbursement.validator';
+import { sendResponse } from '../../../common/utils/apiResponse';
 
 export class SalaryDisbursementController {
   constructor(private service: SalaryDisbursementService = salaryDisbursementService) {}
@@ -34,11 +34,7 @@ export class SalaryDisbursementController {
     try {
       const id = mongoIdSchema.parse(req.params.id);
       const item = await this.service.getById(id);
-      sendResponse({
-        res,
-        statusCode: 200,
-        data: item,
-      });
+      sendResponse({ res, statusCode: 200, data: item });
     } catch (err) {
       next(err);
     }
@@ -47,7 +43,7 @@ export class SalaryDisbursementController {
   create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const validated = createSalaryDisbursementSchema.parse(req.body);
-      const item = await this.service.create(validated as any);
+      const item = await this.service.create(validated);
       sendResponse({
         res,
         statusCode: 201,
@@ -62,7 +58,8 @@ export class SalaryDisbursementController {
   disburse = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = mongoIdSchema.parse(req.params.id);
-      const item = await this.service.disburse(id);
+      const { transactionRef, remarks } = req.body || {};
+      const item = await this.service.disburse(id, transactionRef, remarks);
       sendResponse({
         res,
         statusCode: 200,
@@ -77,26 +74,13 @@ export class SalaryDisbursementController {
   updateStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = mongoIdSchema.parse(req.params.id);
-      const { status } = updateSalaryDisbursementStatusSchema.parse(req.body);
-      const item = await this.service.updateStatus(id, status);
+      const { status, remarks, transactionRef } = updateSalaryDisbursementStatusSchema.parse(req.body);
+      const item = await this.service.updateStatus(id, status, remarks, transactionRef);
       sendResponse({
         res,
         statusCode: 200,
-        message: 'Status updated successfully',
+        message: `Disbursement status updated to ${status}`,
         data: item,
-      });
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  getSummary = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const summary = await this.service.getSummary();
-      sendResponse({
-        res,
-        statusCode: 200,
-        data: summary,
       });
     } catch (err) {
       next(err);
@@ -110,7 +94,20 @@ export class SalaryDisbursementController {
       sendResponse({
         res,
         statusCode: 200,
-        message: 'Disbursement record deleted successfully',
+        message: 'Salary disbursement record deleted successfully',
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getSummary = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const summary = await this.service.getSummary();
+      sendResponse({
+        res,
+        statusCode: 200,
+        data: summary,
       });
     } catch (err) {
       next(err);

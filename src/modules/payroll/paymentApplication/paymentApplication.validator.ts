@@ -5,8 +5,10 @@ export const mongoIdSchema = z.string().min(1, 'ID is required');
 export const createPaymentApplicationSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   provider: z.string().min(1, 'Provider is required'),
+  environment: z.enum(['Sandbox', 'Production']).optional().default('Sandbox'),
   apiKey: z.string().optional(),
   webhookUrl: z.string().optional(),
+  webhookSecret: z.string().optional(),
   autoDisburse: z.boolean().optional(),
   disbursementDay: z.number().min(1).max(31).optional(),
   notes: z.string().optional(),
@@ -21,4 +23,5 @@ export const queryPaymentApplicationSchema = z.object({
   limit: z.union([z.string(), z.number()]).optional(),
   search: z.string().optional(),
   status: z.string().optional(),
+  provider: z.string().optional(),
 });

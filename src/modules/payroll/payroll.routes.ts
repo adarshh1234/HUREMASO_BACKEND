@@ -5,6 +5,7 @@ import benefitAdvanceRoutes from './benefitAdvance/benefitAdvance.routes';
 import salaryDisbursementRoutes from './salaryDisbursement/salaryDisbursement.routes';
 import paymentApplicationRoutes from './paymentApplication/paymentApplication.routes';
 import payrollAIRoutes from './ai/payrollAI.routes';
+import payGradeRoutes from './payGrade/payGrade.routes';
 import { payrollRecordController } from './record/payrollRecord.controller';
 
 const router = Router();
@@ -17,6 +18,7 @@ router.use('/finance-requests', financeRequestRoutes);
 router.use('/benefit-advances', benefitAdvanceRoutes);
 router.use('/disbursements', salaryDisbursementRoutes);
 router.use('/payment-apps', paymentApplicationRoutes);
+router.use('/pay-grades', payGradeRoutes);
 router.use('/ai', payrollAIRoutes);
 
 export const payrollRoutes = router;

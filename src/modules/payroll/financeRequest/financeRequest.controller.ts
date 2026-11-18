@@ -62,12 +62,12 @@ export class FinanceRequestController {
   updateStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = mongoIdSchema.parse(req.params.id);
-      const { status, notes } = updateFinanceRequestStatusSchema.parse(req.body);
-      const item = await this.service.updateStatus(id, status, notes);
+      const { status, remarks, notes, approvedBy } = updateFinanceRequestStatusSchema.parse(req.body);
+      const item = await this.service.updateStatus(id, status, remarks || notes, approvedBy);
       sendResponse({
         res,
         statusCode: 200,
-        message: 'Status updated successfully',
+        message: `Status updated successfully to ${status}`,
         data: item,
       });
     } catch (err) {

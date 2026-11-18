@@ -1,4 +1,4 @@
-import { Schema, model } from 'mongoose';
+import mongoose, { Schema, model } from 'mongoose';
 import { ISalaryDisbursementDocument } from '../payroll.types';
 
 const salaryDisbursementSchema = new Schema<ISalaryDisbursementDocument>(
@@ -13,20 +13,26 @@ const salaryDisbursementSchema = new Schema<ISalaryDisbursementDocument>(
     netAmount: { type: Number, required: true, min: 0 },
     method: {
       type: String,
-      enum: ['Bank Transfer', 'Cash', 'Cheque'],
+      enum: ['Bank Transfer', 'Cash', 'Cheque', 'Stripe', 'PayPal'],
       default: 'Bank Transfer',
     },
     status: {
       type: String,
-      enum: ['Paid', 'Pending', 'Failed', 'Processing'],
+      enum: ['Draft', 'Pending', 'Approved', 'Processing', 'Paid', 'Failed', 'Cancelled'],
       default: 'Pending',
       index: true,
     },
     disbursedAt: { type: String },
+    transactionRef: { type: String },
+    remarks: { type: String },
+    approvedBy: { type: String },
+    approvedAt: { type: String },
   },
   { timestamps: true }
 );
 
-salaryDisbursementSchema.index({ period: 1, department: 1 });
+salaryDisbursementSchema.index({ period: 1, department: 1, status: 1 });
 
-export const SalaryDisbursementModel = model<ISalaryDisbursementDocument>('SalaryDisbursement', salaryDisbursementSchema);
+export const SalaryDisbursementModel =
+  (mongoose.models.SalaryDisbursement as mongoose.Model<ISalaryDisbursementDocument>) ||
+  model<ISalaryDisbursementDocument>('SalaryDisbursement', salaryDisbursementSchema);

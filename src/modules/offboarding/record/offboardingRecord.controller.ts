@@ -1,14 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
 import { offboardingRecordService, OffboardingRecordService } from './offboardingRecord.service';
+import { IOffboardingRecordDocument } from '../offboarding.types';
 import { sendResponse } from '../../../common/utils/apiResponse';
 import {
   createOffboardingRecordSchema,
   updateOffboardingRecordSchema,
   updateDocumentDraftSchema,
+  updatePerformanceSchema,
   updateSettlementSchema,
   updateLegalClearanceSchema,
   updateAssetReturnSchema,
   updateTravelSchema,
+  updateCustomFieldsSchema,
   queryOffboardingSchema,
   mongoIdSchema,
 } from './offboardingRecord.validator';
@@ -68,7 +71,7 @@ export class OffboardingRecordController {
     try {
       const id = mongoIdSchema.parse(req.params.id);
       const validated = updateOffboardingRecordSchema.parse(req.body);
-      const item = await this.service.update(id, validated as any);
+      const item = await this.service.update(id, validated as Partial<IOffboardingRecordDocument>);
       sendResponse({
         res,
         statusCode: 200,
@@ -89,6 +92,22 @@ export class OffboardingRecordController {
         res,
         statusCode: 200,
         message: 'Document drafted/updated successfully',
+        data: item,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updatePerformance = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const validated = updatePerformanceSchema.parse(req.body);
+      const item = await this.service.updatePerformance(id, validated);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Performance retrospective updated successfully',
         data: item,
       });
     } catch (err) {
@@ -153,6 +172,22 @@ export class OffboardingRecordController {
         res,
         statusCode: 200,
         message: 'Travel & Repatriation updated successfully',
+        data: item,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateCustomFields = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const { customFields } = updateCustomFieldsSchema.parse(req.body);
+      const item = await this.service.updateCustomFields(id, customFields);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Custom fields updated successfully',
         data: item,
       });
     } catch (err) {

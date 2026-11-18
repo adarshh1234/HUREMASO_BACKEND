@@ -32,6 +32,7 @@ export class SalaryDisbursementRepository {
         { department: regex },
         { disbursementId: regex },
         { period: regex },
+        { transactionRef: regex },
       ];
     }
 
@@ -40,11 +41,11 @@ export class SalaryDisbursementRepository {
     }
 
     if (params.department && params.department !== 'All') {
-      query.department = new RegExp(escapeRegex(params.department), 'i');
+      query.department = { $regex: new RegExp(`^${escapeRegex(params.department)}$`, 'i') };
     }
 
-    if (params.period) {
-      query.period = new RegExp(escapeRegex(params.period), 'i');
+    if (params.period && params.period !== 'All') {
+      query.period = params.period;
     }
 
     const page = Math.max(1, Number(params.page) || 1);
@@ -63,30 +64,48 @@ export class SalaryDisbursementRepository {
 
   async getSummary(): Promise<DisbursementSummary> {
     await this.seedIfEmpty();
-    const items = await SalaryDisbursementModel.find();
-    const totalGross = items.reduce((sum, item) => sum + (item.grossAmount || 0), 0);
-    const totalNet = items.reduce((sum, item) => sum + (item.netAmount || 0), 0);
-    const totalPaid = items.filter((i) => i.status === 'Paid').reduce((sum, item) => sum + (item.netAmount || 0), 0);
-    const totalPending = items.filter((i) => i.status === 'Pending').reduce((sum, item) => sum + (item.netAmount || 0), 0);
+    const records = await SalaryDisbursementModel.find();
+
+    let totalGross = 0;
+    let totalNet = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+    let paidCount = 0;
+    let pendingCount = 0;
+
+    for (const r of records) {
+      totalGross += r.grossAmount || 0;
+      totalNet += r.netAmount || 0;
+      if (r.status === 'Paid') {
+        totalPaid += r.netAmount || 0;
+        paidCount++;
+      } else {
+        totalPending += r.netAmount || 0;
+        pendingCount++;
+      }
+    }
 
     return {
-      totalGross,
-      totalNet,
-      totalPaid,
-      totalPending,
-      count: items.length,
+      totalGross: Math.round(totalGross),
+      totalNet: Math.round(totalNet),
+      totalPaid: Math.round(totalPaid),
+      totalPending: Math.round(totalPending),
+      count: records.length,
+      paidCount,
+      pendingCount,
     };
   }
 
   async seedIfEmpty(): Promise<void> {
     const count = await SalaryDisbursementModel.countDocuments();
     if (count > 0) return;
+
     await SalaryDisbursementModel.insertMany([
-      { disbursementId: 'DISB-001', employeeName: 'Sarah Johnson', department: 'Marketing', period: 'July 2025', grossAmount: 8500, deductions: 1200, netAmount: 7300, method: 'Bank Transfer', status: 'Paid', disbursedAt: '2025-07-25' },
-      { disbursementId: 'DISB-002', employeeName: 'Michael Chen', department: 'Engineering', period: 'July 2025', grossAmount: 11000, deductions: 1800, netAmount: 9200, method: 'Bank Transfer', status: 'Paid', disbursedAt: '2025-07-25' },
-      { disbursementId: 'DISB-003', employeeName: 'James Wilson', department: 'Sales', period: 'July 2025', grossAmount: 7200, deductions: 900, netAmount: 6300, method: 'Bank Transfer', status: 'Pending' },
-      { disbursementId: 'DISB-004', employeeName: 'Lisa Anderson', department: 'HR', period: 'July 2025', grossAmount: 6800, deductions: 850, netAmount: 5950, method: 'Cheque', status: 'Processing' },
-      { disbursementId: 'DISB-005', employeeName: 'David Kim', department: 'Operations', period: 'July 2025', grossAmount: 9500, deductions: 1500, netAmount: 8000, method: 'Bank Transfer', status: 'Pending' },
+      { disbursementId: 'DISB-2025-001', employeeName: 'Sarah Jenkins', employeeId: 'EMP-1001', department: 'Executive', period: 'July 2025', grossAmount: 14500, deductions: 1750, netAmount: 12750, method: 'Bank Transfer', status: 'Paid', disbursedAt: '2025-07-20T10:00:00Z', transactionRef: 'WIRE-US-9982410-HR', remarks: 'Executive cycle wire cleared' },
+      { disbursementId: 'DISB-2025-002', employeeName: 'David Vance', employeeId: 'EMP-1004', department: 'Engineering', period: 'July 2025', grossAmount: 10000, deductions: 1200, netAmount: 8800, method: 'Bank Transfer', status: 'Pending', remarks: 'Awaiting end-of-week payroll batch release' },
+      { disbursementId: 'DISB-2025-003', employeeName: 'Elena Rostova', employeeId: 'EMP-1005', department: 'Marketing', period: 'July 2025', grossAmount: 8500, deductions: 1100, netAmount: 7400, method: 'Stripe', status: 'Paid', disbursedAt: '2025-07-20T10:15:00Z', transactionRef: 'STRIPE-CH-77821094', remarks: 'Direct deposit via Stripe Payroll' },
+      { disbursementId: 'DISB-2025-004', employeeName: 'Marcus Brody', employeeId: 'EMP-1002', department: 'Product & Design', period: 'July 2025', grossAmount: 8150, deductions: 1000, netAmount: 7150, method: 'Bank Transfer', status: 'Pending', remarks: 'Pending direct deposit validation' },
+      { disbursementId: 'DISB-2025-005', employeeName: 'Jason Wu', employeeId: 'EMP-1003', department: 'Operations', period: 'July 2025', grossAmount: 6100, deductions: 750, netAmount: 5350, method: 'Cheque', status: 'Paid', disbursedAt: '2025-07-20T11:30:00Z', transactionRef: 'CHQ-CORP-440192', remarks: 'Physical cheque voucher issued' },
     ]);
   }
 }

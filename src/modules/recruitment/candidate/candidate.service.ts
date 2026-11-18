@@ -3,6 +3,8 @@ import { CreateCandidateDTO, UpdateCandidateDTO, CandidateQueryParams, ICandidat
 import { AppError } from '../../../common/errors/AppError';
 import { employeeService } from '../../employee/employee.service';
 import { createEmployeeSchema } from '../../employee/employee.validator';
+import { onboardingCandidateService } from '../../onboarding/candidate/onboardingCandidate.service';
+import { onboardingCandidateRepository } from '../../onboarding/candidate/onboardingCandidate.repository';
 
 export class CandidateService {
   constructor(private repo: CandidateRepository = candidateRepository) {}
@@ -147,10 +149,32 @@ export class CandidateService {
     const noteEntry = notes ? `[${new Date().toISOString().split('T')[0]}] Stage -> ${stage}: ${notes}` : `[${new Date().toISOString().split('T')[0]}] Stage -> ${stage}`;
     const updatedNotes = `${existingNotes}${noteEntry}`;
 
-    return this.updateCandidate(id, {
+    const updated = await this.updateCandidate(id, {
       status: stage as any,
       notes: updatedNotes,
     });
+
+    if (stage === 'Onboarding') {
+      try {
+        const existing = await onboardingCandidateRepository.findAll({ search: candidate.email });
+        if (existing.total === 0) {
+          const fullName = candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Candidate';
+          await onboardingCandidateService.create({
+            name: fullName,
+            email: candidate.email,
+            phone: candidate.phone || candidate.contactNumber,
+            role: candidate.jobTitle || 'Software Engineer',
+            department: 'Engineering',
+            startDate: new Date(Date.now() + 14 * 86400000).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+            status: 'Offer Accepted',
+          });
+        }
+      } catch {
+        // Safe fallback
+      }
+    }
+
+    return updated;
   }
 
   async getPipelineMetrics(vacancyId?: string) {

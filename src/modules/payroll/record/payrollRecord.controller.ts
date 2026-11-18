@@ -7,6 +7,7 @@ import {
   payRecordSchema,
   queryPayrollRecordSchema,
   mongoIdSchema,
+  approvePayOnRequestSchema,
 } from './payrollRecord.validator';
 
 export class PayrollRecordController {
@@ -115,6 +116,50 @@ export class PayrollRecordController {
         res,
         statusCode: 200,
         data: reports,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getEmploymentStatus = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.getEmploymentStatusSummary();
+      sendResponse({
+        res,
+        statusCode: 200,
+        data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  generateSlip = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const record = await this.service.generateSlip(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Salary slip generated successfully',
+        data: record,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  approvePayOnRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const { status, approvalRemarks, approvedBy } = approvePayOnRequestSchema.parse(req.body);
+      const record = await this.service.approvePayOnRequest(id, status, approvalRemarks, approvedBy);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: `Pay on request marked as ${status}`,
+        data: record,
       });
     } catch (err) {
       next(err);

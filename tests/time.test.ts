@@ -160,6 +160,140 @@ describe('Time & Attendance Module Integration Tests', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.status).toBe('Approved');
     });
+
+    it('should get access control gateway status', async () => {
+      const res = await request(app).get('/api/v1/time/timesheets/access-control/status');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.hardwareStatus).toBeDefined();
+    });
+
+    it('should create and filter site work timesheet', async () => {
+      const res = await request(app)
+        .post('/api/v1/time/timesheets')
+        .send({
+          workType: 'site_work',
+          siteName: 'Terminal 3 Construction Site',
+          periodStartDate: '2026-09-22',
+          periodEndDate: '2026-09-22',
+          hours: 9,
+          workDetails: 'Concrete structural inspection',
+          status: 'Submitted',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.workType).toBe('site_work');
+      expect(res.body.data.siteName).toBe('Terminal 3 Construction Site');
+
+      const filterRes = await request(app).get('/api/v1/time/timesheets?workType=site_work');
+      expect(filterRes.status).toBe(200);
+      expect(filterRes.body.data.some((item: any) => item.siteName === 'Terminal 3 Construction Site')).toBe(true);
+    });
+
+    it('should create and filter field work timesheet', async () => {
+      const res = await request(app)
+        .post('/api/v1/time/timesheets')
+        .send({
+          workType: 'field_work',
+          location: 'Industrial Zone East Sector',
+          periodStartDate: '2026-09-23',
+          periodEndDate: '2026-09-23',
+          hours: 8.5,
+          workDetails: 'On-site sensor calibration and client walkthrough',
+          status: 'Submitted',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.workType).toBe('field_work');
+      expect(res.body.data.location).toBe('Industrial Zone East Sector');
+
+      const filterRes = await request(app).get('/api/v1/time/timesheets?workType=field_work');
+      expect(filterRes.status).toBe(200);
+      expect(filterRes.body.data.some((item: any) => item.location === 'Industrial Zone East Sector')).toBe(true);
+    });
+
+    it('should create and filter access control log timesheet', async () => {
+      const res = await request(app)
+        .post('/api/v1/time/timesheets')
+        .send({
+          workType: 'access_control',
+          deviceSource: 'Main Turnstile Gate #1',
+          checkInTime: '08:45 AM',
+          checkOutTime: '05:15 PM',
+          periodStartDate: '2026-09-24',
+          periodEndDate: '2026-09-24',
+          hours: 8.5,
+          status: 'Approved',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.workType).toBe('access_control');
+      expect(res.body.data.deviceSource).toBe('Main Turnstile Gate #1');
+
+      const filterRes = await request(app).get('/api/v1/time/timesheets?workType=access_control');
+      expect(filterRes.status).toBe(200);
+      expect(filterRes.body.data.some((item: any) => item.deviceSource === 'Main Turnstile Gate #1')).toBe(true);
+    });
+
+    it('should support full category fields, OT calculations, update and delete', async () => {
+      // 1. Office Time
+      const officeRes = await request(app)
+        .post('/api/v1/time/timesheets')
+        .send({
+          workType: 'office',
+          employeeName: 'Sarah Jenkins',
+          employeeCode: 'EMP-001',
+          officeLocation: 'Kochi HQ Block A',
+          periodStartDate: '2026-09-25',
+          periodEndDate: '2026-09-25',
+          loginSource: 'Biometric Sign-in',
+          loginTime: '09:00 AM',
+          logoutTime: '06:00 PM',
+          status: 'Submitted',
+        });
+      expect(officeRes.status).toBe(200);
+      expect(officeRes.body.data.workingHours).toBe(9);
+      expect(officeRes.body.data.loginSource).toBe('Biometric Sign-in');
+      const officeId = officeRes.body.data._id || officeRes.body.data.id;
+
+      // 2. Site Work with automatic OT calculation
+      const siteRes = await request(app)
+        .post('/api/v1/time/timesheets')
+        .send({
+          workType: 'site_work',
+          projectName: 'Metro Station Extension',
+          projectLocation: 'North Kochi Corridor',
+          siteLocation: 'Pillar 44 Pier Site',
+          employeeName: 'Sarah Jenkins',
+          supervisorName: 'David Miller',
+          supervisorId: 'SUP-901',
+          timeIn: '08:00 AM',
+          timeOut: '07:00 PM', // 11 hours -> OT should be 3
+          status: 'Pending Approval',
+        });
+      expect(siteRes.status).toBe(200);
+      expect(siteRes.body.data.workingHours).toBe(11);
+      expect(siteRes.body.data.overtimeHours).toBe(3);
+
+      // 3. Update timesheet
+      const updateRes = await request(app)
+        .put(`/api/v1/time/timesheets/${officeId}`)
+        .send({
+          officeLocation: 'Kochi HQ Tower B',
+          status: 'Approved',
+        });
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.data.officeLocation).toBe('Kochi HQ Tower B');
+      expect(updateRes.body.data.status).toBe('Approved');
+
+      // 4. Delete timesheet
+      const deleteRes = await request(app).delete(`/api/v1/time/timesheets/${officeId}`);
+      expect(deleteRes.status).toBe(200);
+      expect(deleteRes.body.success).toBe(true);
+    });
   });
 
   // 3. OVERTIME (OT)

@@ -66,13 +66,46 @@ export class OnboardingCandidateRepository {
     const inProgressCount = items.filter((i) => i.status === 'In Progress' || i.status === 'Offer Accepted' || i.status === 'Contract Signed').length;
     const verificationPendingCount = items.filter((i) => i.status === 'Verification Pending' || i.status === 'Pending').length;
 
+    let totalChecks = 0;
+    let verifiedChecks = 0;
+    for (const item of items) {
+      const bg = item.backgroundVerification;
+      if (bg) {
+        const checks = [bg.legal, bg.pcc, bg.immigration, bg.biometrics, bg.credentials, bg.digital, bg.postHire];
+        for (const check of checks) {
+          if (check) {
+            totalChecks++;
+            if (check.status === 'Verified') {
+              verifiedChecks++;
+            }
+          }
+        }
+      }
+    }
+    const complianceRate = totalChecks > 0 ? Math.round((verifiedChecks / totalChecks) * 1000) / 10 : 100;
+
+    let totalDays = 0;
+    let countDays = 0;
+    for (const item of items) {
+      if (item.offer?.offerDate && item.startDate) {
+        const start = new Date(item.startDate);
+        const offer = new Date(item.offer.offerDate);
+        if (!isNaN(start.getTime()) && !isNaN(offer.getTime()) && start.getTime() > offer.getTime()) {
+          const diffDays = Math.round((start.getTime() - offer.getTime()) / (1000 * 60 * 60 * 24));
+          totalDays += diffDays;
+          countDays++;
+        }
+      }
+    }
+    const averageOnboardingDays = countDays > 0 ? Math.round(totalDays / countDays) : 14;
+
     return {
       totalOnboarding,
       completedCount,
       inProgressCount,
       verificationPendingCount,
-      averageOnboardingDays: 14,
-      complianceRate: 98.5,
+      averageOnboardingDays,
+      complianceRate,
     };
   }
 

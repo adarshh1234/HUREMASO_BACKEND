@@ -22,6 +22,8 @@ export interface ITimeAtWorkMetric {
   todayFormattedTime: string;
   weekRangeLabel: string;
   weeklyHours: ITimeWeeklyDayMetric[];
+  employeeName?: string;
+  employeeAvatar?: string;
 }
 
 export interface IDistributionItem {

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { organizationService, OrganizationService } from './organization.service';
+import { EmployeeModel } from '../../employee/employee.model';
 import { sendResponse } from '../../../common/utils/apiResponse';
 import {
   updateOrganizationSchema,
@@ -14,10 +15,13 @@ export class OrganizationController {
   getOrganization = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const org = await this.service.getOrganization();
+      const employeeCount = await EmployeeModel.countDocuments({ isTerminated: { $ne: true } }).catch(() => 0);
+      const orgObj = (org as any).toObject ? (org as any).toObject() : { ...org };
+      orgObj.employeeCount = employeeCount;
       sendResponse({
         res,
         statusCode: 200,
-        data: org,
+        data: orgObj,
       });
     } catch (err) {
       next(err);

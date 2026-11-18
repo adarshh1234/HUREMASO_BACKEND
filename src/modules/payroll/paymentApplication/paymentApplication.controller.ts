@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { paymentApplicationService, PaymentApplicationService } from './paymentApplication.service';
-import { sendResponse } from '../../../common/utils/apiResponse';
 import {
   createPaymentApplicationSchema,
   updatePaymentApplicationSchema,
   queryPaymentApplicationSchema,
   mongoIdSchema,
 } from './paymentApplication.validator';
+import { sendResponse } from '../../../common/utils/apiResponse';
 
 export class PaymentApplicationController {
   constructor(private service: PaymentApplicationService = paymentApplicationService) {}
@@ -34,11 +34,7 @@ export class PaymentApplicationController {
     try {
       const id = mongoIdSchema.parse(req.params.id);
       const item = await this.service.getById(id);
-      sendResponse({
-        res,
-        statusCode: 200,
-        data: item,
-      });
+      sendResponse({ res, statusCode: 200, data: item });
     } catch (err) {
       next(err);
     }
@@ -75,6 +71,36 @@ export class PaymentApplicationController {
     }
   };
 
+  testConnection = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const result = await this.service.testConnection(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: result.message,
+        data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  sync = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = mongoIdSchema.parse(req.params.id);
+      const item = await this.service.sync(id);
+      sendResponse({
+        res,
+        statusCode: 200,
+        message: 'Payment synchronization completed',
+        data: item,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   delete = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const id = mongoIdSchema.parse(req.params.id);
@@ -82,7 +108,7 @@ export class PaymentApplicationController {
       sendResponse({
         res,
         statusCode: 200,
-        message: 'Payment application deleted successfully',
+        message: 'Payment application removed successfully',
       });
     } catch (err) {
       next(err);

@@ -11,6 +11,16 @@ export class TimesheetController {
     }
   }
 
+  async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = req.params.id as string;
+      const data = await timesheetService.updateTimesheet(id, req.body);
+      res.status(200).json({ success: true, message: 'Timesheet updated successfully', data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async submit(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.params.id as string;
@@ -59,6 +69,15 @@ export class TimesheetController {
     try {
       const result = await timesheetService.getPendingTimesheets(req.query as any);
       res.status(200).json({ success: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getAccessControlStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = timesheetService.getAccessControlStatus();
+      res.status(200).json({ success: true, data });
     } catch (err) {
       next(err);
     }
@@ -118,4 +137,3 @@ export class TimesheetController {
 }
 
 export const timesheetController = new TimesheetController();
-

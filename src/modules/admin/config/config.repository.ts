@@ -12,6 +12,9 @@ export class ConfigurationRepository {
   async updateConfiguration(data: Partial<IConfigurationDoc>): Promise<IConfigurationDoc> {
     const conf = await this.getConfiguration();
     Object.assign(conf, data);
+    for (const key of Object.keys(data)) {
+      conf.markModified(key);
+    }
     return await conf.save();
   }
 }
